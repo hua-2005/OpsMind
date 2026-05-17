@@ -1,4 +1,4 @@
-// OpsMind 后端服务入口：加载配置 → 初始化基础设施 → 执行迁移 → 启动 HTTP 服务
+// OpsMind 后端服务入口：加载配置 → 初始化基础设施 → 执行迁移 → 种子数据 → 启动 HTTP
 package main
 
 import (
@@ -12,7 +12,6 @@ import (
 )
 
 func main() {
-	// 获取项目根目录，用于定位 configs/ 和 migrations/
 	_, filename, _, _ := runtime.Caller(0)
 	rootDir := filepath.Join(filepath.Dir(filename), "..", "..")
 
@@ -32,8 +31,13 @@ func main() {
 	}
 	log.Println("Migrations completed successfully")
 
+	// 种子管理员密码（替换迁移中的占位哈希）
+	if err := bootstrap.SeedAdminPassword(app.DB); err != nil {
+		log.Fatalf("Failed to seed admin password: %v", err)
+	}
+
 	// 设置 Gin 路由
-	r := router.Setup()
+	r := router.Setup(app.DB, app.Config)
 
 	addr := fmt.Sprintf(":%d", app.Config.Server.Port)
 	log.Printf("OpsMind server starting on %s (mode: %s)", addr, app.Config.Server.Mode)

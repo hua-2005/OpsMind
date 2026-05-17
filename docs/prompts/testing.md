@@ -13,3 +13,4 @@
 测试执行报告必须基于 `docs/TEST/TEST_BM.md` 和 `docs/TEST/MS_TESTPLAN.md` 编写。
 如已编写或执行测试代码，需要在报告中记录测试代码路径、执行命令、执行结果、失败用例和修复建议。
 每次测试完 直接新建docs\TEST\TEST_EXPORT\xx.md
+相关测试代码编写在test/*下
