@@ -18,14 +18,26 @@ import (
 	"opsmind/internal/handler"
 	"opsmind/internal/model"
 	"opsmind/internal/repository"
-	"opsmind/internal/router"
 	"opsmind/internal/service"
 	"opsmind/pkg/hash"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+// setupTestRouter 创建测试用 Gin 引擎，绑定认证路由。
+func setupTestRouter(authHandler *handler.AuthHandler) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	auth := r.Group("/api/v1/auth")
+	auth.POST("/login", authHandler.Login)
+	auth.POST("/refresh", authHandler.Refresh)
+	auth.POST("/change-password", authHandler.ChangePassword)
+	auth.POST("/logout", authHandler.Logout)
+	return r
+}
 
 // setupHandlerTestDB 初始化测试数据库。
 func setupHandlerTestDB(t *testing.T) *gorm.DB {
@@ -100,7 +112,7 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 	authHandler := setupAuthHandler(t, db)
 	seedHandlerUser(t, db, "test_handler_login", "Test@1234", "13800002001", 1)
 
-	r := router.SetupTestRouter(authHandler)
+	r := setupTestRouter(authHandler)
 
 	body, _ := json.Marshal(map[string]string{
 		"username": "test_handler_login",
@@ -129,7 +141,7 @@ func TestAuthHandler_Login_MissingParams(t *testing.T) {
 	db := setupHandlerTestDB(t)
 	authHandler := setupAuthHandler(t, db)
 
-	r := router.SetupTestRouter(authHandler)
+	r := setupTestRouter(authHandler)
 
 	// 缺少 password
 	body, _ := json.Marshal(map[string]string{
@@ -150,7 +162,7 @@ func TestAuthHandler_Login_WrongPassword(t *testing.T) {
 	authHandler := setupAuthHandler(t, db)
 	seedHandlerUser(t, db, "test_handler_wrong", "Test@1234", "13800002002", 1)
 
-	r := router.SetupTestRouter(authHandler)
+	r := setupTestRouter(authHandler)
 
 	body, _ := json.Marshal(map[string]string{
 		"username": "test_handler_wrong",
@@ -174,7 +186,7 @@ func TestAuthHandler_Logout(t *testing.T) {
 	db := setupHandlerTestDB(t)
 	authHandler := setupAuthHandler(t, db)
 
-	r := router.SetupTestRouter(authHandler)
+	r := setupTestRouter(authHandler)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
 	w := httptest.NewRecorder()
