@@ -1,0 +1,166 @@
+/**
+ * Vue Router 路由定义
+ *
+ * 路由分为三组：
+ * - 公开路由（/login）— 无需认证
+ * - 门户路由（/portal/*）— 需要登录 + 报障人角色
+ * - 后台路由（/admin/*）— 需要登录 + 对应角色权限
+ *
+ * 路由守卫检查 token 有效性、首次登录强制跳转修改密码页、角色权限校验。
+ */
+
+import { createRouter, createWebHistory } from 'vue-router'
+import { getToken } from '@/utils/auth'
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    // 公开路由
+    {
+      path: '/login',
+      name: 'Login',
+      component: () => import('@/views/auth/Login.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
+      path: '/change-password',
+      name: 'ChangePassword',
+      component: () => import('@/views/auth/ChangePassword.vue'),
+      meta: { requiresAuth: true }
+    },
+
+    // 门户路由
+    {
+      path: '/portal',
+      component: () => import('@/components/layout/PortalLayout.vue'),
+      meta: { requiresAuth: true, roles: ['reporter'] },
+      children: [
+        {
+          path: '',
+          redirect: '/portal/chat'
+        },
+        {
+          path: 'chat',
+          name: 'PortalChat',
+          component: () => import('@/views/portal/Chat.vue')
+        },
+        {
+          path: 'tickets',
+          name: 'PortalTickets',
+          component: () => import('@/views/portal/TicketQuery.vue')
+        },
+        {
+          path: 'tickets/submit',
+          name: 'PortalTicketSubmit',
+          component: () => import('@/views/portal/TicketSubmit.vue')
+        },
+        {
+          path: 'tickets/:id',
+          name: 'PortalTicketDetail',
+          component: () => import('@/views/portal/TicketDetail.vue')
+        },
+        {
+          path: 'messages',
+          name: 'PortalMessages',
+          component: () => import('@/views/portal/Messages.vue')
+        }
+      ]
+    },
+
+    // 后台路由
+    {
+      path: '/admin',
+      component: () => import('@/components/layout/AdminLayout.vue'),
+      meta: { requiresAuth: true },
+      children: [
+        {
+          path: '',
+          redirect: '/admin/dashboard'
+        },
+        {
+          path: 'dashboard',
+          name: 'AdminDashboard',
+          component: () => import('@/views/admin/Dashboard.vue')
+        },
+        {
+          path: 'tickets',
+          name: 'AdminTickets',
+          component: () => import('@/views/admin/TicketList.vue')
+        },
+        {
+          path: 'tickets/:id',
+          name: 'AdminTicketDetail',
+          component: () => import('@/views/admin/TicketDetail.vue')
+        },
+        {
+          path: 'knowledge',
+          name: 'AdminKnowledge',
+          component: () => import('@/views/admin/KnowledgeList.vue')
+        },
+        {
+          path: 'knowledge/:id',
+          name: 'AdminKnowledgeEdit',
+          component: () => import('@/views/admin/KnowledgeEdit.vue')
+        },
+        {
+          path: 'users',
+          name: 'AdminUsers',
+          component: () => import('@/views/admin/UserList.vue')
+        },
+        {
+          path: 'roles',
+          name: 'AdminRoles',
+          component: () => import('@/views/admin/RoleManage.vue')
+        },
+        {
+          path: 'audit-logs',
+          name: 'AdminAuditLogs',
+          component: () => import('@/views/admin/AuditLog.vue')
+        },
+        {
+          path: 'model-config',
+          name: 'AdminModelConfig',
+          component: () => import('@/views/admin/ModelConfig.vue')
+        },
+        {
+          path: 'embedding-config',
+          name: 'AdminEmbeddingConfig',
+          component: () => import('@/views/admin/EmbeddingConfig.vue')
+        },
+        {
+          path: 'system-config',
+          name: 'AdminSystemConfig',
+          component: () => import('@/views/admin/SystemConfig.vue')
+        }
+      ]
+    },
+
+    // 默认重定向
+    {
+      path: '/',
+      redirect: '/login'
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      redirect: '/login'
+    }
+  ]
+})
+
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  const token = getToken()
+
+  // 需要认证的路由
+  if (to.meta.requiresAuth !== false) {
+    if (!token) {
+      // 未登录，跳转登录页
+      next('/login')
+      return
+    }
+  }
+
+  next()
+})
+
+export default router
