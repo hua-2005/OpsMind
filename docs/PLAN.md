@@ -506,7 +506,6 @@
 - Create: `server/internal/service/auth_service.go` ✅
 - Create: `server/internal/handler/auth.go` ✅
 - Modify: `server/internal/repository/user_repo.go`（添加 Update 方法）✅
-- Modify: `server/internal/router/test_helper.go`（测试辅助）✅
 - Test: `server/tests/service/auth_service_test.go` ✅
 - Test: `server/tests/handler/auth_handler_test.go` ✅
 
