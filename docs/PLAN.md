@@ -169,6 +169,7 @@
 | `server/tests/middleware/auth_test.go` | JWT 中间件：有效令牌/过期令牌/缺失令牌 | T12 |
 | `server/tests/middleware/rbac_test.go` | RBAC 中间件：有权限/无权限/管理员权限 | T13 |
 | `server/tests/router/router_test.go` | 路由注册骨架、健康检查端点、501 占位响应 | T07 |
+| `server/tests/repository/user_repo_test.go` | 用户 Repository：GetByID/GetByUsername/GetByPhone/ExistsByPhone/Create | T10 |
 | `server/tests/adapter/rag_client_test.go` | RagClient：请求构造/响应映射/超时/错误降级 | T20 |
 | `server/tests/adapter/storage_client_test.go` | StorageClient：上传/预签名/删除 | T27 |
 | `server/tests/service/auth_service_test.go` | 登录成功/密码错误/账号冻结/令牌刷新 | T11 |
@@ -461,10 +462,11 @@
 
 ---
 
-### Task 10: 用户 Repository
+### Task 10: 用户 Repository ✅
 
 **Files:**
-- Create: `server/internal/repository/user_repo.go`
+- Create: `server/internal/repository/user_repo.go` ✅
+- Test: `server/tests/repository/user_repo_test.go` ✅
 
 **说明：**
 
