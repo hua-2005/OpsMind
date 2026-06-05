@@ -22,6 +22,10 @@ const (
 	ErrNotFound = 10004
 	// ErrConflict 资源冲突（如账号名重复）
 	ErrConflict = 10005
+	// ErrAlreadyFrozen 用户已被冻结
+	ErrAlreadyFrozen = 10006
+	// ErrAlreadyActive 用户已处于正常状态
+	ErrAlreadyActive = 10007
 )
 
 // 外部服务错误码（2xxxx）
@@ -45,6 +49,8 @@ var messages = map[int]string{
 	ErrParam:              "参数校验失败",
 	ErrNotFound:           "资源不存在",
 	ErrConflict:           "资源冲突",
+	ErrAlreadyFrozen:      "用户已被冻结",
+	ErrAlreadyActive:      "用户已处于正常状态",
 	ErrAIUnavailable:      "AI 服务不可用",
 	ErrRAGUnavailable:     "RAG 服务不可用",
 	ErrStorageUnavailable: "存储服务不可用",

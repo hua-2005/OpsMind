@@ -73,7 +73,7 @@
 | `internal/adapter/rag_client.go` | AnythingLLM RagClient 接口 + HTTP 实现 | T20 |
 | `internal/adapter/storage_client.go` | MinIO StorageClient 接口 + S3 实现 | T27 |
 | `internal/service/auth_service.go` | 登录、刷新令牌、修改密码 | T11 |
-| `internal/service/user_service.go` | 用户 CRUD、冻结/恢复 | T14 |
+| `internal/service/user_service.go` | 用户 CRUD、冻结/恢复 | T14 ✅ |
 | `internal/service/role_service.go` | 角色 CRUD、菜单权限绑定 | T15 |
 | `internal/service/knowledge_service.go` | 知识库/知识条目 CRUD、审核、发布、停用、重试同步 | T18, T19 |
 | `internal/service/chat_service.go` | 问答会话创建、置信度判断、降级处理 | T26 |
@@ -173,7 +173,7 @@
 | `server/tests/adapter/rag_client_test.go` | RagClient：请求构造/响应映射/超时/错误降级 | T20 |
 | `server/tests/adapter/storage_client_test.go` | StorageClient：上传/预签名/删除 | T27 |
 | `server/tests/service/auth_service_test.go` | 登录成功/密码错误/账号冻结/令牌刷新/修改密码 | T11 |
-| `server/tests/service/user_service_test.go` | 用户 CRUD/冻结恢复/密码校验/用户名重复 | T14 |
+| `server/tests/service/user_service_test.go` | 用户 CRUD/冻结恢复/密码校验/用户名重复 | T14 ✅ |
 | `server/tests/service/role_service_test.go` | 角色 CRUD/菜单绑定 | T15 |
 | `server/tests/service/knowledge_service_test.go` | 知识 CRUD/审核流程/发布同步/停用/重试 | T18, T19 |
 | `server/tests/service/chat_service_test.go` | 问答创建/置信度判断/低置信度转人工/AI 降级/会话保存 | T26 |
@@ -186,7 +186,7 @@
 | `server/tests/handler/chat_test.go` | 问答接口集成测试（含降级场景） | T26 |
 | `server/tests/handler/ticket_test.go` | 申告接口集成测试（含状态机） | T24 |
 | `server/tests/handler/knowledge_test.go` | 知识管理接口集成测试 | T18, T19 |
-| `server/tests/handler/user_test.go` | 用户管理接口集成测试 | T14 |
+| `server/tests/handler/user_handler_test.go` | 用户管理接口集成测试 | T14 ✅ |
 | `server/tests/database/database_test.go` | 数据库连接和迁移验证 | T03, T04 |
 | `server/tests/database/migrate_test.go` | 自动迁移：16 张表创建/列验证 | T04 |
 | `server/tests/config/config_test.go` | 配置加载/环境变量覆盖 | T02 |
@@ -582,15 +582,15 @@
 
 ---
 
-### Task 14: 用户管理 Service + Handler
+### Task 14: 用户管理 Service + Handler ✅
 
 **Files:**
 - Create: `server/internal/dto/request/user.go`
 - Create: `server/internal/dto/response/user.go`
-- Create: `server/internal/service/user_service.go`
-- Create: `server/internal/handler/user.go`
-- Test: `server/tests/service/user_service_test.go`
-- Test: `server/tests/handler/user_test.go`
+- Create: `server/internal/service/user_service.go` ✅
+- Create: `server/internal/handler/user.go` ✅
+- Test: `server/tests/service/user_service_test.go` ✅
+- Test: `server/tests/handler/user_handler_test.go` ✅
 
 **说明：**
 
