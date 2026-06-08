@@ -55,7 +55,9 @@ const handleLogin = async () => {
 
   try {
     const res = await login(form.value)
-    const data = res.data.data
+    // Axios 拦截器已提取 response.data，所以 res = {code, message, data}
+    // res.data 才是 LoginResponse（含 access_token、user、roles 等）
+    const data = res.data
 
     authStore.setToken(data.access_token)
     authStore.setUserInfo({
@@ -72,7 +74,7 @@ const handleLogin = async () => {
       router.push('/admin')
     }
   } catch (err: any) {
-    error.value = err.response?.data?.message || '登录失败'
+    error.value = err?.message || '登录失败，请检查网络连接'
   } finally {
     loading.value = false
   }
