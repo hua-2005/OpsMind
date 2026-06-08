@@ -78,27 +78,27 @@ func TestUserService_GetByID_NotFound(t *testing.T) {
 func TestUserService_List_Success(t *testing.T) {
 	svc, _ := setupUserService(t)
 
-	users, total, err := svc.List(1, 10, "")
+	result, err := svc.List(1, 10, "")
 	if err != nil {
 		t.Fatalf("期望无错误, got %v", err)
 	}
-	if total < 1 {
-		t.Errorf("期望 total >= 1, got %d", total)
+	if result.Total < 1 {
+		t.Errorf("期望 total >= 1, got %d", result.Total)
 	}
-	if len(users) < 1 {
-		t.Errorf("期望至少1条记录, got %d", len(users))
+	if len(result.Users) < 1 {
+		t.Errorf("期望至少1条记录, got %d", len(result.Users))
 	}
 }
 
 func TestUserService_List_WithKeyword(t *testing.T) {
 	svc, _ := setupUserService(t)
 
-	users, _, err := svc.List(1, 10, "test_svcuser_1")
+	result, err := svc.List(1, 10, "test_svcuser_1")
 	if err != nil {
 		t.Fatalf("期望无错误, got %v", err)
 	}
-	if len(users) < 1 {
-		t.Errorf("期望至少1条记录, got %d", len(users))
+	if len(result.Users) < 1 {
+		t.Errorf("期望至少1条记录, got %d", len(result.Users))
 	}
 }
 

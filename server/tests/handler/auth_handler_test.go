@@ -81,7 +81,7 @@ func setupAuthHandler(t *testing.T, db *gorm.DB) *handler.AuthHandler {
 	t.Helper()
 
 	userRepo := repository.NewUserRepo(db)
-	authService := service.NewAuthService(userRepo)
+	authService := service.NewAuthService(userRepo, nil)
 	return handler.NewAuthHandler(authService)
 }
 
