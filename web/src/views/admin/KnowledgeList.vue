@@ -26,13 +26,13 @@
           <h2>{{ selectedKB ? selectedKB.name + ' — 文章' : '请选择知识库' }}</h2>
           <div class="header-actions">
             <select v-model="statusFilter" @change="fetchArticles" class="status-filter">
-              <option :value="0">全部状态</option>
+              <option :value="-1">全部状态</option>
               <option :value="1">草稿</option>
               <option :value="2">待审核</option>
               <option :value="3">已通过</option>
               <option :value="4">已发布</option>
               <option :value="5">已驳回</option>
-              <option :value="-1">已停用</option>
+              <option :value="0">已停用</option>
             </select>
             <button v-if="selectedKB" class="btn-add-article" @click="goCreate">+ 新建文章</button>
           </div>
@@ -114,7 +114,7 @@ const fetchArticles = async () => {
   if (!selectedKB.value) return
   try {
     const params: any = { page: currentPage.value, page_size: pageSize.value }
-    if (statusFilter.value !== 0) params.status = statusFilter.value
+    if (statusFilter.value !== -1) params.status = statusFilter.value
     const res = await listArticles(selectedKB.value.id, params)
     articles.value = res.data.articles || []; total.value = res.data.total || 0
   } catch (e) { console.error(e) }

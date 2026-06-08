@@ -193,8 +193,10 @@ func (s *KnowledgeService) Review(id int64, reviewerID int64, req request.Review
 	}
 
 	if req.Approved {
-		// 通过：status=3
-		return s.repo.UpdateArticleStatus(id, 3)
+		// 通过：status=3，同时记录审核人
+		article.Status = 3
+		article.ReviewedBy = &reviewerID
+		return s.repo.UpdateArticle(article)
 	}
 
 	// 驳回：必须填写审核意见

@@ -371,6 +371,9 @@ func TestKnowledgeService_Review_Approve(t *testing.T) {
 	if updated.Status != 3 {
 		t.Errorf("期望 status=3(已通过), got %d", updated.Status)
 	}
+	if updated.ReviewedBy == nil || *updated.ReviewedBy != 2 {
+		t.Error("期望 reviewed_by=2（审核人已记录）")
+	}
 }
 
 // TestKnowledgeService_Review_Reject 审核驳回。
@@ -572,7 +575,7 @@ func TestKnowledgeService_ListArticles(t *testing.T) {
 		createTestArticle(t, svc, kb.ID, 1)
 	}
 
-	result, err := svc.ListArticles(kb.ID, 0, 1, 10)
+	result, err := svc.ListArticles(kb.ID, -1, 1, 10)
 	if err != nil {
 		t.Fatalf("期望无错误, got %v", err)
 	}

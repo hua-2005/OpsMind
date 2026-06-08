@@ -106,7 +106,7 @@ func (r *KnowledgeRepo) UpdateArticle(article *model.KnowledgeArticle) error {
 //
 // 参数说明：
 //   - kbID: 知识库 ID，必传（>0）
-//   - status: 文章状态，传 0 表示不过滤
+//   - status: 文章状态，传 -1 表示不过滤，0 表示已停用
 //   - page/pageSize: 分页参数
 //
 // 为什么按 id DESC 排序：最新创建的文章排在前面，符合管理后台使用习惯。
@@ -115,7 +115,7 @@ func (r *KnowledgeRepo) ListArticles(kbID int64, status int, page, pageSize int)
 	var total int64
 
 	query := r.db.Model(&model.KnowledgeArticle{}).Where("kb_id = ?", kbID)
-	if status > 0 {
+	if status >= 0 {
 		query = query.Where("status = ?", status)
 	}
 

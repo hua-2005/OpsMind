@@ -252,7 +252,7 @@ func (h *KnowledgeHandler) ListArticles(c *gin.Context) {
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	status, _ := strconv.Atoi(c.DefaultQuery("status", "0"))
+	status, _ := strconv.Atoi(c.DefaultQuery("status", "-1"))
 
 	if page < 1 {
 		page = 1

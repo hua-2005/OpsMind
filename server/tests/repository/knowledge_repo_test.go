@@ -389,7 +389,7 @@ func TestKnowledgeRepo_ListArticles(t *testing.T) {
 	assert.Equal(t, "已发布问题", articles[0].Question)
 
 	// 查询全部（status=0）
-	articles, total, err = repo.ListArticles(kb.ID, 0, 1, 10)
+	articles, total, err = repo.ListArticles(kb.ID, -1, 1, 10)
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), total)
 	assert.Len(t, articles, 3)
@@ -424,19 +424,19 @@ func TestKnowledgeRepo_ListArticles_Pagination(t *testing.T) {
 	}
 
 	// 第 1 页，每页 2 条
-	articles, total, err := repo.ListArticles(kb.ID, 0, 1, 2)
+	articles, total, err := repo.ListArticles(kb.ID, -1, 1, 2)
 	require.NoError(t, err)
 	assert.Equal(t, int64(5), total)
 	assert.Len(t, articles, 2)
 
 	// 第 2 页
-	articles, total, err = repo.ListArticles(kb.ID, 0, 2, 2)
+	articles, total, err = repo.ListArticles(kb.ID, -1, 2, 2)
 	require.NoError(t, err)
 	assert.Equal(t, int64(5), total)
 	assert.Len(t, articles, 2)
 
 	// 第 3 页（仅 1 条）
-	articles, total, err = repo.ListArticles(kb.ID, 0, 3, 2)
+	articles, total, err = repo.ListArticles(kb.ID, -1, 3, 2)
 	require.NoError(t, err)
 	assert.Equal(t, int64(5), total)
 	assert.Len(t, articles, 1)

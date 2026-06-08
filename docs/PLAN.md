@@ -678,7 +678,7 @@
 
 ---
 
-### Task 17: 知识库 Repository
+### Task 17: 知识库 Repository ✅
 
 **Files:**
 - Create: `server/internal/repository/knowledge_repo.go`
@@ -714,7 +714,7 @@
 
 ---
 
-### Task 18: 知识库 Service + Handler（CRUD + 审核）
+### Task 18: 知识库 Service + Handler（CRUD + 审核） ✅
 
 **Files:**
 - Create: `server/internal/dto/request/knowledge.go`
@@ -763,7 +763,7 @@
 
 ---
 
-### Task 19: Embedding 配置管理
+### Task 19: Embedding 配置管理 ✅
 
 **Files:**
 - Modify: `server/internal/service/knowledge_service.go`（增加 EmbeddingConfig 相关方法）
@@ -785,7 +785,7 @@
 
 ---
 
-### Task 20: AnythingLLM RagClient 适配器
+### Task 20: AnythingLLM RagClient 适配器 ✅
 
 **Files:**
 - Create: `server/internal/adapter/rag_client.go`
@@ -819,7 +819,7 @@
 
 ---
 
-### Task 21: 后端 main.go 完善 M1-M3 初始化
+### Task 21: 后端 main.go 完善 M1-M3 初始化 ✅
 
 **Files:**
 - Modify: `server/cmd/main.go`
@@ -841,7 +841,7 @@
 
 ---
 
-### Task 22: Vue 知识库管理页面
+### Task 22: Vue 知识库管理页面 ✅
 
 **Files:**
 - Create: `src/api/knowledge.ts`
