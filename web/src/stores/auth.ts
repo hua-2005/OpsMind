@@ -8,7 +8,7 @@ interface UserInfo {
   real_name: string
   phone: string
   email: string
-  status: number
+  status?: number    // 登录接口不返回，用户管理接口返回
   first_login: boolean
 }
 

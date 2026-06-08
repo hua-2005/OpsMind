@@ -208,11 +208,11 @@
 
 ---
 
-### Task 01: Go 项目初始化
+### Task 01: Go 项目初始化 ✅
 
 **Files:**
-- Create: `server/cmd/main.go`
-- Create: `server/go.mod`
+- Create: `server/cmd/main.go` ✅
+- Create: `server/go.mod` ✅
 
 **说明：**
 
@@ -225,13 +225,13 @@
 - `github.com/pgvector/pgvector-go` — pgvector 向量类型
 - `golang.org/x/crypto` — bcrypt
 
-`cmd/main.go` 暂时只包含 `func main()`，打印启动日志。后续任务逐步填充初始化逻辑。
+`cmd/main.go` 已包含完整的初始化流程（T11 完成后补充了 DB/Repo/Service/Handler/Router 全链路初始化）。
 
 **Verification:** `go build ./cmd/...` 编译通过。
 
 ---
 
-### Task 02: 配置管理
+### Task 02: 配置管理 ✅
 
 **Files:**
 - Create: `server/internal/config/config.go`
@@ -264,7 +264,7 @@
 
 ---
 
-### Task 03: 数据库连接
+### Task 03: 数据库连接 ✅
 
 **Files:**
 - Create: `server/internal/database/database.go`
@@ -286,7 +286,7 @@
 
 ---
 
-### Task 04: GORM 数据模型
+### Task 04: GORM 数据模型 ✅
 
 **Files:**
 - Create: `server/internal/model/user.go`
@@ -324,7 +324,7 @@
 
 ---
 
-### Task 05: 公共工具包
+### Task 05: 公共工具包 ✅
 
 **Files:**
 - Create: `server/pkg/response/response.go`
@@ -351,7 +351,7 @@
 
 ---
 
-### Task 06: 中间件（CORS + 日志）
+### Task 06: 中间件（CORS + 日志） ✅
 
 **Files:**
 - Create: `server/internal/middleware/cors.go`
@@ -366,7 +366,7 @@
 
 ---
 
-### Task 07: 路由注册骨架
+### Task 07: 路由注册骨架 ✅
 
 **Files:**
 - Create: `server/internal/router/router.go`
@@ -376,25 +376,20 @@
 
 **说明：**
 
-- **router.go** — `Setup(cfg *config.AppConfig, db *gorm.DB) *gin.Engine` 函数：
+- **router.go** — `Setup(cfg *config.AppConfig, h *Handlers) *gin.Engine` 函数：
   - 创建 Gin 实例（release/debug 模式由配置决定）
-  - 注册 CORS 中间件、Logger 中间件
-  - 挂载 `/api/v1/auth` 公开路由组
-  - 挂载 `/api/v1/portal` 路由组（需要 JWT 中间件）
-  - 挂载 `/api/v1/admin` 路由组（需要 JWT 中间件 + RBAC 中间件）
+  - 注册 CORS 中间件、Logger 中间件、RequestID 中间件、Recovery 中间件
+  - 挂载 `/api/v1/auth` 公开路由组（已绑定 AuthHandler，或使用占位 Handler）
+  - 挂载 `/api/v1/portal` 路由组（已应用 `middleware.JWTAuth`）
+  - 挂载 `/api/v1/admin` 路由组（已应用 `middleware.JWTAuth`）
   - 返回 engine
 
-- **portal.go** — 注册门户端路由，占位 Handler 函数（返回 501 Not Implemented）。路由列表与 TECH.md §5.2 门户端对齐：
-  - POST `/chat-sessions`、GET `/chat-sessions/:id`、POST `/chat-sessions/:id/feedback`
-  - POST `/tickets`、GET `/tickets`、GET `/tickets/:id`、PATCH `/tickets/:id/supplement`
-  - GET `/messages`、PATCH `/messages/:id/read`、GET `/messages/unread-count`
+- **portal.go** — 注册门户端路由，占位 Handler 函数（返回 501 Not Implemented）。JWT 认证在 router.go 中统一应用。
 
-- **admin.go** — 注册后台管理路由，占位 Handler 函数。路由列表与 TECH.md §5.2 后台管理对齐：
-  - 申告管理：GET/GET/PATCH/POST `/tickets/...`
-  - 知识库管理：GET/POST/PUT `/knowledge-bases/...`、GET/POST/PUT/POST `/knowledge-articles/...`
-  - 用户管理：GET/POST/PUT/PATCH `/users/...`
-  - 角色权限：GET/POST/PUT `/roles/...`、GET/PUT `/menus/...`
-  - 数据看板：GET `/dashboard/stats`、GET `/dashboard/trends`
+- **admin.go** — 注册后台管理路由。**已实现的路由绑定真实 Handler（T14 用户管理、T15 角色管理），未实现的仍用占位。** 
+  - 用户管理：GET/POST/PUT/PATCH `/users/...`（已绑定 UserHandler，含 RBAC）
+  - 角色权限：GET/POST/GET/PUT/DELETE `/roles/...`（已绑定 RoleHandler，含 RBAC）
+  - 其他路由（申告、知识库、看板、配置等）使用占位 Handler
   - 操作日志：GET `/audit-logs`
   - 系统配置：GET/PUT `/configs/:key`、GET/POST/PUT `/embedding-configs/...`
 
@@ -404,7 +399,7 @@
 
 ---
 
-### Task 08: Vue 前端项目初始化
+### Task 08: Vue 前端项目初始化 ✅
 
 **Files:**
 - Create: `web/package.json`
@@ -532,6 +527,8 @@
 - `POST /change-password` — 从 context 取 userID，调用 AuthService.ChangePassword
 - `POST /logout` — MVP 阶段返回成功（无状态 JWT，客户端清除 token 即可）
 
+**T15 完成后补充：** `buildLoginResponse` 已更新为查询真实角色、权限和菜单树（系统管理员自动获得全部菜单，非管理员按角色菜单聚合）。
+
 **测试覆盖：**
 - `auth_service_test.go` — 使用 mock UserRepository：登录成功、密码错误、账号冻结、刷新令牌、修改密码（旧密码错误、新密码不符合策略）
 - `auth_handler_test.go` — 使用 httptest：POST /login 正常返回、参数缺失返回 400
@@ -594,18 +591,21 @@
 
 **说明：**
 
-**dto/request/user.go** — `CreateUserRequest`（Username、Password、RealName、Phone、Email、RoleIDs）、`UpdateUserRequest`（RealName、Phone、Email、RoleIDs）。
+**dto/request/user.go** ✅ — `CreateUserRequest`（Username、Password、RealName、Phone、Email、RoleIDs）、`UpdateUserRequest`（RealName、Phone、Email、RoleIDs）。
 
-**dto/response/user.go** — `UserListResponse`（含分页）、`UserDetailResponse`（含角色列表）。
+**dto/response/user.go** ✅ — `UserListResponse`（含分页）、`UserDetailResponse`（含角色列表）。
+
+**user_repo.go** ✅ — 补充了 `List`、`UpdateStatus`、`ExistsByUsername`、`GetUserRoles`、`AssignRoles`、`ListMenus`、`GetRoleMenus`、`UpdateRoleMenus`、`GetUserPermissions` 等方法。
 
 **user_service.go** — 方法：
-- `CreateUser(req CreateUserRequest) error` — 校验用户名唯一（冲突返回 10005）、校验密码策略、bcrypt 哈希、创建用户、分配角色、写审计日志
-- `UpdateUser(id int64, req UpdateUserRequest) error` — 更新基本信息、重新分配角色
-- `FreezeUser(id int64) error` — 设置 status=2
-- `UnfreezeUser(id int64) error` — 设置 status=1
-- `ListUsers(page, pageSize int) (*UserListResponse, error)`
+- `Create(req CreateUserRequest) error` ✅ — 校验用户名唯一（冲突返回 10005）、校验密码策略、bcrypt 哈希、创建用户、分配角色
+- `Update(id int64, req UpdateUserRequest) error` ✅ — 更新基本信息、重新分配角色
+- `Freeze(id int64) error` ✅ — 设置 status=2
+- `Restore(id int64) error` ✅ — 设置 status=1
+- `List(page, pageSize int, keyword string) (*UserListResponse, error)` ✅ — 分页+搜索，返回含角色名的详情列表
+- `GetByID(id int64) (*UserDetailResponse, error)` ✅ — 查询用户详情+角色列表
 
-**user.go Handler** — 绑定对应 API 端点。
+**user.go Handler** ✅ — 绑定全部 CRUD 端点（Create、GetByID、List、Update、Freeze、Restore）。
 
 **测试覆盖：**
 - 创建用户成功、用户名重复返回 10005、密码不符合策略

@@ -51,6 +51,7 @@ desktop.ini
 # === Claude Code / AI 工具 ===
 .claude/
 .codex/
+.codegraph/
 
 # === 测试 / 覆盖率 ===
 *.coverprofile

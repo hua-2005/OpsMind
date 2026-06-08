@@ -1,5 +1,13 @@
 import request from '../utils/request'
 
+// 后端统一响应格式（axios 响应拦截器已提取 response.data）
+// request.post<T> 中的 T 对应 response.data 的类型
+interface ApiResponse<T> {
+  code: number
+  message: string
+  data: T
+}
+
 interface LoginParams {
   username: string
   password: string
@@ -12,6 +20,8 @@ interface LoginResponse {
     id: number
     username: string
     real_name: string
+    phone: string
+    email: string
     first_login: boolean
   }
   roles: string[]
@@ -25,7 +35,7 @@ interface ChangePasswordParams {
 }
 
 export function login(data: LoginParams) {
-  return request.post<LoginResponse>('/api/v1/auth/login', data)
+  return request.post<ApiResponse<LoginResponse>>('/api/v1/auth/login', data)
 }
 
 export function refreshToken(refresh_token: string) {

@@ -8,6 +8,7 @@ package handler
 import (
 	"strconv"
 
+	"opsmind/internal/dto/request"
 	"opsmind/internal/service"
 	"opsmind/pkg/errcode"
 	"opsmind/pkg/response"
@@ -25,7 +26,27 @@ func NewUserHandler(svc *service.UserService) *UserHandler {
 	return &UserHandler{svc: svc}
 }
 
+// Create 创建用户。
+//
+// POST /api/v1/admin/users
+func (h *UserHandler) Create(c *gin.Context) {
+	var req request.CreateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errcode.ErrParam, "参数校验失败: "+err.Error())
+		return
+	}
+
+	if svcErr := h.svc.Create(req); svcErr != nil {
+		handleServiceError(c, svcErr)
+		return
+	}
+
+	response.Success(c, nil)
+}
+
 // GetByID 获取用户详情。
+//
+// GET /api/v1/admin/users/:id
 func (h *UserHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -43,6 +64,8 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 }
 
 // List 用户列表（分页）。
+//
+// GET /api/v1/admin/users
 func (h *UserHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
@@ -55,16 +78,42 @@ func (h *UserHandler) List(c *gin.Context) {
 		pageSize = 10
 	}
 
-	users, total, err := h.svc.List(page, pageSize, keyword)
+	result, err := h.svc.List(page, pageSize, keyword)
 	if err != nil {
 		response.Error(c, errcode.ErrUnknown, err.Error())
 		return
 	}
 
-	response.SuccessWithPage(c, users, total, page, pageSize)
+	response.SuccessWithPage(c, result.Users, result.Total, page, pageSize)
+}
+
+// Update 更新用户基本信息。
+//
+// PUT /api/v1/admin/users/:id
+func (h *UserHandler) Update(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, errcode.ErrParam, "无效的用户 ID")
+		return
+	}
+
+	var req request.UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, errcode.ErrParam, "参数校验失败: "+err.Error())
+		return
+	}
+
+	if svcErr := h.svc.Update(id, req); svcErr != nil {
+		handleServiceError(c, svcErr)
+		return
+	}
+
+	response.Success(c, nil)
 }
 
 // Freeze 冻结用户。
+//
+// PATCH /api/v1/admin/users/:id/freeze
 func (h *UserHandler) Freeze(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -81,6 +130,8 @@ func (h *UserHandler) Freeze(c *gin.Context) {
 }
 
 // Restore 恢复已冻结用户。
+//
+// PATCH /api/v1/admin/users/:id/unfreeze
 func (h *UserHandler) Restore(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {

@@ -149,7 +149,9 @@ func TestAdminRoutes_Exist(t *testing.T) {
 		// 角色权限
 		{"GET", "/api/v1/admin/roles"},
 		{"POST", "/api/v1/admin/roles"},
+		{"GET", "/api/v1/admin/roles/1"},
 		{"PUT", "/api/v1/admin/roles/1"},
+		{"DELETE", "/api/v1/admin/roles/1"},
 		{"GET", "/api/v1/admin/menus"},
 		{"PUT", "/api/v1/admin/roles/1/menus"},
 
@@ -182,18 +184,19 @@ func TestAdminRoutes_Exist(t *testing.T) {
 	}
 }
 
-// TestPlaceholderHandler_Returns501 测试占位 Handler 返回 501
+// TestPlaceholderHandler_Returns501 测试占位 Handler 返回 501。
+//
+// 公开路由（/auth/...）无 JWT 中间件，直接返回 501。
 func TestPlaceholderHandler_Returns501(t *testing.T) {
 	r := setupRouter()
 
-	// 测试多个路由都返回 501
+	// 公开路由：无 JWT 中间件，占位 Handler 返回 501
 	routes := []struct {
 		method string
 		path   string
 	}{
-		{"GET", "/api/v1/portal/tickets"},
-		{"GET", "/api/v1/admin/users"},
-		{"GET", "/api/v1/admin/dashboard/stats"},
+		{"POST", "/api/v1/auth/login"},
+		{"POST", "/api/v1/auth/refresh"},
 	}
 
 	for _, rt := range routes {
@@ -203,6 +206,33 @@ func TestPlaceholderHandler_Returns501(t *testing.T) {
 
 		if w.Code != http.StatusNotImplemented {
 			t.Errorf("%s %s: 期望 501，实际 %d", rt.method, rt.path, w.Code)
+		}
+	}
+}
+
+// TestProtectedRoutes_RequireAuth 测试门户端和后台管理路由需要 JWT 认证。
+//
+// 未携带令牌时返回 401，而非 501 或 200。
+func TestProtectedRoutes_RequireAuth(t *testing.T) {
+	r := setupRouter()
+
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{"GET", "/api/v1/portal/tickets"},
+		{"GET", "/api/v1/admin/users"},
+		{"GET", "/api/v1/admin/dashboard/stats"},
+		{"GET", "/api/v1/admin/roles"},
+	}
+
+	for _, rt := range routes {
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(rt.method, rt.path, nil)
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("%s %s: 期望 401（未认证），实际 %d", rt.method, rt.path, w.Code)
 		}
 	}
 }

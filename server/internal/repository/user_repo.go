@@ -85,3 +85,145 @@ func (r *UserRepo) Create(user *model.User) error {
 func (r *UserRepo) Update(user *model.User) error {
 	return r.db.Save(user).Error
 }
+
+// List 分页查询用户列表，支持关键词搜索。
+func (r *UserRepo) List(page, pageSize int, keyword string) ([]model.User, int64, error) {
+	var users []model.User
+	var total int64
+
+	query := r.db.Model(&model.User{})
+	if keyword != "" {
+		query = query.Where("username LIKE ? OR real_name LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	offset := (page - 1) * pageSize
+	if err := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&users).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return users, total, nil
+}
+
+// UpdateStatus 更新用户状态（冻结/恢复）。
+//
+// 为什么单独封装而非复用 Update：仅更新 status 字段，避免意外覆盖其他字段。
+func (r *UserRepo) UpdateStatus(id int64, status int) error {
+	return r.db.Model(&model.User{}).Where("id = ?", id).Update("status", status).Error
+}
+
+// ExistsByUsername 检查用户名是否已存在。
+func (r *UserRepo) ExistsByUsername(username string) (bool, error) {
+	var count int64
+	err := r.db.Model(&model.User{}).Where("username = ?", username).Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// --- 角色/菜单/权限关联查询 ---
+
+// GetUserRoles 查询用户关联的角色列表。
+func (r *UserRepo) GetUserRoles(userID int64) ([]model.Role, error) {
+	var roles []model.Role
+	err := r.db.Joins("JOIN user_roles ON user_roles.role_id = roles.id").
+		Where("user_roles.user_id = ?", userID).
+		Find(&roles).Error
+	return roles, err
+}
+
+// AssignRoles 分配用户角色（先删后插，保证幂等）。
+func (r *UserRepo) AssignRoles(userID int64, roleIDs []int64) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&model.UserRole{}).Error; err != nil {
+			return err
+		}
+		for _, roleID := range roleIDs {
+			if err := tx.Create(&model.UserRole{UserID: userID, RoleID: roleID}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// ListMenus 查询全部菜单（按排序字段升序）。
+func (r *UserRepo) ListMenus() ([]model.Menu, error) {
+	var menus []model.Menu
+	err := r.db.Order("sort_order ASC, id ASC").Find(&menus).Error
+	return menus, err
+}
+
+// GetRoleMenus 查询角色关联的菜单列表。
+func (r *UserRepo) GetRoleMenus(roleID int64) ([]model.Menu, error) {
+	var menus []model.Menu
+	err := r.db.Joins("JOIN role_menus ON role_menus.menu_id = menus.id").
+		Where("role_menus.role_id = ?", roleID).
+		Order("menus.sort_order ASC, menus.id ASC").
+		Find(&menus).Error
+	return menus, err
+}
+
+// UpdateRoleMenus 更新角色菜单关联（先删后插）。
+func (r *UserRepo) UpdateRoleMenus(roleID int64, menuIDs []int64) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("role_id = ?", roleID).Delete(&model.RoleMenu{}).Error; err != nil {
+			return err
+		}
+		for _, menuID := range menuIDs {
+			if err := tx.Create(&model.RoleMenu{RoleID: roleID, MenuID: menuID}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// GetUserPermissions 聚合用户所有角色的权限列表（去重）。
+func (r *UserRepo) GetUserPermissions(userID int64) ([]string, error) {
+	roles, err := r.GetUserRoles(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{})
+	for _, role := range roles {
+		// Permissions 是 datatypes.JSON，需要从 Go 侧解析
+		// 这里直接返回角色名列表，由 Service 层根据角色名映射权限
+		_ = role
+	}
+
+	// 查询角色名列表
+	var roleNames []string
+	err = r.db.Model(&model.Role{}).
+		Joins("JOIN user_roles ON user_roles.role_id = roles.id").
+		Where("user_roles.user_id = ?", userID).
+		Pluck("roles.name", &roleNames).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// 根据角色名映射权限（与 middleware/rolePermissions 保持一致）
+	permMap := map[string][]string{
+		"系统管理员":   {"ticket:read", "ticket:write", "ticket:assign", "knowledge:read", "knowledge:write", "knowledge:review", "system:config", "user:manage", "audit:read"},
+		"运维人员":    {"ticket:read", "ticket:write", "knowledge:read", "knowledge:write"},
+		"知识库管理员": {"knowledge:read", "knowledge:write", "knowledge:review"},
+		"报障人":     {},
+	}
+
+	for _, name := range roleNames {
+		for _, perm := range permMap[name] {
+			seen[perm] = struct{}{}
+		}
+	}
+
+	result := make([]string, 0, len(seen))
+	for perm := range seen {
+		result = append(result, perm)
+	}
+	return result, nil
+}

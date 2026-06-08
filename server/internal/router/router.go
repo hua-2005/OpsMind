@@ -17,11 +17,21 @@ import (
 	"opsmind/internal/middleware"
 )
 
+// Handlers 聚合所有 Handler 实例，供路由注册使用。
+//
+// 为什么用结构体而非多参数：Handler 数量随里程碑增加，
+// 结构体便于扩展，添加新 Handler 时只需加字段，不影响 Setup 函数签名。
+type Handlers struct {
+	Auth *handler.AuthHandler
+	User *handler.UserHandler
+	Role *handler.RoleHandler
+}
+
 // Setup 初始化 Gin 引擎并注册所有路由。
 //
 // cfg 用于设置 Gin 模式（debug/release）和中间件配置。
-// authHandler 为 nil 时公开路由使用占位 Handler（用于路由骨架测试）。
-func Setup(cfg *config.AppConfig, authHandler *handler.AuthHandler) *gin.Engine {
+// h 包含所有已初始化的 Handler，nil 字段使用占位 Handler。
+func Setup(cfg *config.AppConfig, h *Handlers) *gin.Engine {
 	// 设置 Gin 模式
 	gin.SetMode(cfg.Server.Mode)
 
@@ -40,15 +50,17 @@ func Setup(cfg *config.AppConfig, authHandler *handler.AuthHandler) *gin.Engine 
 
 	// 公开路由组（无需认证）
 	public := r.Group("/api/v1/auth")
-	registerPublicRoutes(public, authHandler)
+	registerPublicRoutes(public, h)
 
 	// 门户端路由组（需要 JWT 认证）
 	portal := r.Group("/api/v1/portal")
+	portal.Use(middleware.JWTAuth(cfg.JWT.Secret))
 	registerPortalRoutes(portal)
 
 	// 后台管理路由组（需要 JWT 认证 + RBAC 权限）
 	admin := r.Group("/api/v1/admin")
-	registerAdminRoutes(admin)
+	admin.Use(middleware.JWTAuth(cfg.JWT.Secret))
+	registerAdminRoutes(admin, h)
 
 	return r
 }
@@ -66,14 +78,12 @@ func placeholder() gin.HandlerFunc {
 }
 
 // registerPublicRoutes 注册公开路由（无需认证）。
-//
-// authHandler 非 nil 时绑定真实 Handler，否则使用占位 Handler。
-func registerPublicRoutes(rg *gin.RouterGroup, authHandler *handler.AuthHandler) {
-	if authHandler != nil {
-		rg.POST("/login", authHandler.Login)
-		rg.POST("/refresh", authHandler.Refresh)
-		rg.POST("/change-password", authHandler.ChangePassword)
-		rg.POST("/logout", authHandler.Logout)
+func registerPublicRoutes(rg *gin.RouterGroup, h *Handlers) {
+	if h != nil && h.Auth != nil {
+		rg.POST("/login", h.Auth.Login)
+		rg.POST("/refresh", h.Auth.Refresh)
+		rg.POST("/change-password", h.Auth.ChangePassword)
+		rg.POST("/logout", h.Auth.Logout)
 	} else {
 		rg.POST("/login", placeholder())
 		rg.POST("/refresh", placeholder())

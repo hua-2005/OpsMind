@@ -148,7 +148,7 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const token = getToken()
 
   // 需要认证的路由

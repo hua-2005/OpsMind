@@ -35,11 +35,12 @@ func (e AppError) Error() string {
 // AuthService 认证业务逻辑
 type AuthService struct {
 	userRepo *repository.UserRepo
+	db       *gorm.DB
 }
 
 // NewAuthService 创建 AuthService 实例
-func NewAuthService(userRepo *repository.UserRepo) *AuthService {
-	return &AuthService{userRepo: userRepo}
+func NewAuthService(userRepo *repository.UserRepo, db *gorm.DB) *AuthService {
+	return &AuthService{userRepo: userRepo, db: db}
 }
 
 // Login 用户登录。
@@ -125,15 +126,34 @@ func (s *AuthService) ChangePassword(userID int64, oldPwd, newPwd string) error 
 
 // buildLoginResponse 根据用户信息组装登录响应。
 //
-// 为什么提取为独立函数：Login 和 RefreshToken 共用相同的令牌生成和响应组装逻辑。
+// 查询用户角色、权限、菜单树，组装完整的 LoginResponse。
+// 菜单树构建思路：先从全部菜单中分离一级菜单，再递归挂载子菜单。
 func (s *AuthService) buildLoginResponse(user *model.User) (*response.LoginResponse, error) {
-	// MVP 阶段角色和权限从 UserRole/Role 表查询，暂时返回空
-	// 后续 T15 实现 RoleRepo 后补充
-	roles := []string{}
-	permissions := []string{}
+	// 查询用户角色
+	roles, err := s.userRepo.GetUserRoles(user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("查询用户角色失败: %w", err)
+	}
+
+	roleNames := make([]string, 0, len(roles))
+	for _, role := range roles {
+		roleNames = append(roleNames, role.Name)
+	}
+
+	// 查询用户权限
+	permissions, err := s.userRepo.GetUserPermissions(user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("查询用户权限失败: %w", err)
+	}
+
+	// 查询用户菜单树
+	menuTree, err := s.buildMenuTree(user.ID, roles)
+	if err != nil {
+		return nil, fmt.Errorf("查询用户菜单失败: %w", err)
+	}
 
 	accessToken, err := jwt.GenerateAccessToken(
-		user.ID, user.Username, roles,
+		user.ID, user.Username, roleNames,
 		jwtSecret(), 2*time.Hour,
 	)
 	if err != nil {
@@ -141,7 +161,7 @@ func (s *AuthService) buildLoginResponse(user *model.User) (*response.LoginRespo
 	}
 
 	refreshToken, err := jwt.GenerateRefreshToken(
-		user.ID, user.Username, roles,
+		user.ID, user.Username, roleNames,
 		jwtSecret(), 7*24*time.Hour,
 	)
 	if err != nil {
@@ -159,10 +179,80 @@ func (s *AuthService) buildLoginResponse(user *model.User) (*response.LoginRespo
 			Email:      user.Email,
 			FirstLogin: user.FirstLogin,
 		},
-		Roles:       roles,
+		Roles:       roleNames,
 		Permissions: permissions,
-		Menus:       []response.MenuItem{},
+		Menus:       menuTree,
 	}, nil
+}
+
+// buildMenuTree 构建用户的菜单树。
+//
+// 为什么在 Service 层而非 Repository 层构建树结构：
+// 树构建是展示逻辑，属于业务层的职责。Repository 只负责数据查询。
+//
+// 系统管理员自动获得全部菜单。
+func (s *AuthService) buildMenuTree(userID int64, roles []model.Role) ([]response.MenuItem, error) {
+	// 判断是否为系统管理员
+	isAdmin := false
+	for _, role := range roles {
+		if role.Name == "系统管理员" {
+			isAdmin = true
+			break
+		}
+	}
+
+	var menus []model.Menu
+	var err error
+
+	if isAdmin {
+		// 系统管理员获取全部菜单
+		menus, err = s.userRepo.ListMenus()
+	} else {
+		// 其他用户：聚合所有角色的菜单（去重）
+		menuMap := make(map[int64]model.Menu)
+		for _, role := range roles {
+			roleMenus, roleErr := s.userRepo.GetRoleMenus(role.ID)
+			if roleErr != nil {
+				return nil, roleErr
+			}
+			for _, m := range roleMenus {
+				menuMap[m.ID] = m
+			}
+		}
+		for _, m := range menuMap {
+			menus = append(menus, m)
+		}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 构建菜单树
+	return buildTree(menus, 0), nil
+}
+
+// buildTree 递归构建菜单树。
+//
+// parentID=0 表示一级菜单，子菜单通过 parentID 关联。
+func buildTree(menus []model.Menu, parentID int64) []response.MenuItem {
+	var result []response.MenuItem
+	for _, m := range menus {
+		if m.ParentID == parentID {
+			item := response.MenuItem{
+				ID:        m.ID,
+				Name:      m.Name,
+				Path:      m.Path,
+				Icon:      m.Icon,
+				ParentID:  m.ParentID,
+				SortOrder: m.SortOrder,
+				Type:      m.Type,
+				Children:  buildTree(menus, m.ID),
+			}
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 // jwtSecret 从环境变量读取 JWT 密钥。

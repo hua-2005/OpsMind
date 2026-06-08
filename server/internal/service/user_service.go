@@ -6,9 +6,12 @@
 package service
 
 import (
+	"opsmind/internal/dto/request"
+	"opsmind/internal/dto/response"
 	"opsmind/internal/model"
 	"opsmind/internal/repository"
 	"opsmind/pkg/errcode"
+	"opsmind/pkg/hash"
 
 	"gorm.io/gorm"
 )
@@ -24,8 +27,8 @@ func NewUserService(repo *repository.UserRepo, db *gorm.DB) *UserService {
 	return &UserService{repo: repo, db: db}
 }
 
-// GetByID 根据 ID 获取用户。
-func (s *UserService) GetByID(id int64) (*model.User, error) {
+// GetByID 根据 ID 获取用户详情（含角色列表）。
+func (s *UserService) GetByID(id int64) (*response.UserDetailResponse, error) {
 	user, err := s.repo.GetByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -33,29 +36,108 @@ func (s *UserService) GetByID(id int64) (*model.User, error) {
 		}
 		return nil, err
 	}
-	return user, nil
+
+	return s.toDetailResponse(user)
 }
 
 // List 查询用户列表（分页 + 关键词搜索）。
-func (s *UserService) List(page, pageSize int, keyword string) ([]model.User, int64, error) {
-	var users []model.User
-	var total int64
-
-	query := s.db.Model(&model.User{})
-	if keyword != "" {
-		query = query.Where("username LIKE ? OR real_name LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+func (s *UserService) List(page, pageSize int, keyword string) (*response.UserListResponse, error) {
+	users, total, err := s.repo.List(page, pageSize, keyword)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
+	details := make([]response.UserDetailResponse, 0, len(users))
+	for i := range users {
+		detail, err := s.toDetailResponse(&users[i])
+		if err != nil {
+			return nil, err
+		}
+		details = append(details, *detail)
 	}
 
-	offset := (page - 1) * pageSize
-	if err := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&users).Error; err != nil {
-		return nil, 0, err
+	return &response.UserListResponse{
+		Users: details,
+		Total: total,
+	}, nil
+}
+
+// Create 创建用户。
+//
+// 流程：校验用户名唯一 → 校验密码策略 → bcrypt 哈希 → 创建用户 → 分配角色。
+// 为什么用户名冲突返回 10005 而非 10003：10005 明确表示资源冲突，
+// 前端可根据此错误码展示"用户名已被占用"提示。
+func (s *UserService) Create(req request.CreateUserRequest) error {
+	// 校验用户名唯一
+	exists, err := s.repo.ExistsByUsername(req.Username)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return AppError{Code: errcode.ErrConflict, Message: "用户名已存在"}
 	}
 
-	return users, total, nil
+	// 校验密码策略
+	if err := hash.ValidatePassword(req.Password); err != nil {
+		return AppError{Code: errcode.ErrParam, Message: err.Error()}
+	}
+
+	// bcrypt 哈希
+	passwordHash, err := hash.HashPassword(req.Password)
+	if err != nil {
+		return err
+	}
+
+	user := &model.User{
+		Username:     req.Username,
+		PasswordHash: passwordHash,
+		RealName:     req.RealName,
+		Phone:        req.Phone,
+		Email:        req.Email,
+		Status:       1,
+		FirstLogin:   true,
+	}
+
+	if err := s.repo.Create(user); err != nil {
+		return err
+	}
+
+	// 分配角色
+	if len(req.RoleIDs) > 0 {
+		if err := s.repo.AssignRoles(user.ID, req.RoleIDs); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Update 更新用户基本信息。
+//
+// 仅更新 RealName/Phone/Email 和角色分配，密码修改走独立接口。
+func (s *UserService) Update(id int64, req request.UpdateUserRequest) error {
+	user, err := s.repo.GetByID(id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return AppError{Code: errcode.ErrNotFound, Message: "用户不存在"}
+		}
+		return err
+	}
+
+	user.RealName = req.RealName
+	user.Phone = req.Phone
+	user.Email = req.Email
+
+	if err := s.repo.Update(user); err != nil {
+		return err
+	}
+
+	// 重新分配角色
+	if err := s.repo.AssignRoles(id, req.RoleIDs); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Freeze 冻结用户。
@@ -74,8 +156,7 @@ func (s *UserService) Freeze(id int64) error {
 		return AppError{Code: errcode.ErrAlreadyFrozen, Message: "用户已被冻结"}
 	}
 
-	user.Status = 2
-	return s.repo.Update(user)
+	return s.repo.UpdateStatus(id, 2)
 }
 
 // Restore 恢复已冻结用户。
@@ -94,6 +175,31 @@ func (s *UserService) Restore(id int64) error {
 		return AppError{Code: errcode.ErrAlreadyActive, Message: "用户已处于正常状态"}
 	}
 
-	user.Status = 1
-	return s.repo.Update(user)
+	return s.repo.UpdateStatus(id, 1)
+}
+
+// toDetailResponse 将 User 模型转换为 UserDetailResponse。
+func (s *UserService) toDetailResponse(user *model.User) (*response.UserDetailResponse, error) {
+	roles, err := s.repo.GetUserRoles(user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	roleNames := make([]string, len(roles))
+	for i, role := range roles {
+		roleNames[i] = role.Name
+	}
+
+	return &response.UserDetailResponse{
+		ID:         user.ID,
+		Username:   user.Username,
+		RealName:   user.RealName,
+		Phone:      user.Phone,
+		Email:      user.Email,
+		Status:     user.Status,
+		FirstLogin: user.FirstLogin,
+		Roles:      roleNames,
+		CreatedAt:  user.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:  user.UpdatedAt.Format("2006-01-02 15:04:05"),
+	}, nil
 }

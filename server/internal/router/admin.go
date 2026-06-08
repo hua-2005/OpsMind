@@ -1,61 +1,94 @@
 // Package router 负责注册 Gin 路由。
 //
 // 本文件注册后台管理路由，与 TECH.md §5.2 后台管理对齐。
-// 所有路由需要 JWT 认证 + RBAC 权限，当前使用占位 Handler 返回 501。
+// 所有路由需要 JWT 认证 + RBAC 权限（在 router.go 中统一挂载）。
 package router
 
-import "github.com/gin-gonic/gin"
+import (
+	"opsmind/internal/middleware"
+
+	"github.com/gin-gonic/gin"
+)
 
 // registerAdminRoutes 注册后台管理路由。
 //
 // 后台管理面向运维人员和管理员，提供申告处理、知识库管理、用户管理等功能。
 // 路由列表与 TECH.md §5.2 后台管理对齐。
-func registerAdminRoutes(rg *gin.RouterGroup) {
-	// 申告管理
-	rg.GET("/tickets", placeholder())                           // 申告列表
-	rg.GET("/tickets/:id", placeholder())                       // 申告详情
-	rg.PATCH("/tickets/:id/status", placeholder())              // 更新申告状态
-	rg.POST("/tickets/:id/records", placeholder())              // 添加处理记录
-	rg.POST("/tickets/:id/knowledge-candidate", placeholder())  // 生成知识候选
+// 已实现 Handler 的路由绑定真实 Handler，未实现的仍使用占位。
+func registerAdminRoutes(rg *gin.RouterGroup, h *Handlers) {
+	// 申告管理（占位 — T24 实现）
+	rg.GET("/tickets", placeholder())
+	rg.GET("/tickets/:id", placeholder())
+	rg.PATCH("/tickets/:id/status", placeholder())
+	rg.POST("/tickets/:id/records", placeholder())
+	rg.POST("/tickets/:id/knowledge-candidate", placeholder())
 
-	// 知识库管理
-	rg.GET("/knowledge-bases", placeholder())                       // 知识库列表
-	rg.POST("/knowledge-bases", placeholder())                      // 创建知识库
-	rg.PUT("/knowledge-bases/:id", placeholder())                   // 更新知识库
-	rg.GET("/knowledge-articles", placeholder())                    // 知识条目列表
-	rg.POST("/knowledge-articles", placeholder())                   // 创建知识条目
-	rg.PUT("/knowledge-articles/:id", placeholder())                // 更新知识条目
-	rg.POST("/knowledge-articles/:id/submit-review", placeholder()) // 提交审核
-	rg.POST("/knowledge-articles/:id/review", placeholder())        // 审核知识
-	rg.POST("/knowledge-articles/:id/publish", placeholder())       // 发布知识
-	rg.POST("/knowledge-articles/:id/disable", placeholder())       // 停用知识
-	rg.POST("/knowledge-articles/:id/retry-sync", placeholder())    // 重试同步
+	// 知识库管理（占位 — T18 实现）
+	rg.GET("/knowledge-bases", placeholder())
+	rg.POST("/knowledge-bases", placeholder())
+	rg.PUT("/knowledge-bases/:id", placeholder())
+	rg.GET("/knowledge-articles", placeholder())
+	rg.POST("/knowledge-articles", placeholder())
+	rg.PUT("/knowledge-articles/:id", placeholder())
+	rg.POST("/knowledge-articles/:id/submit-review", placeholder())
+	rg.POST("/knowledge-articles/:id/review", placeholder())
+	rg.POST("/knowledge-articles/:id/publish", placeholder())
+	rg.POST("/knowledge-articles/:id/disable", placeholder())
+	rg.POST("/knowledge-articles/:id/retry-sync", placeholder())
 
-	// 用户管理
-	rg.GET("/users", placeholder())                             // 用户列表
-	rg.POST("/users", placeholder())                            // 创建用户
-	rg.PUT("/users/:id", placeholder())                         // 更新用户
-	rg.PATCH("/users/:id/freeze", placeholder())                // 冻结用户
-	rg.PATCH("/users/:id/unfreeze", placeholder())              // 恢复用户
+	// 用户管理（T14 — 已实现）
+	userRoutes := rg.Group("/users")
+	{
+		if h != nil && h.User != nil {
+			userRoutes.GET("", middleware.RequirePermission("user:manage"), h.User.List)
+			userRoutes.POST("", middleware.RequirePermission("user:manage"), h.User.Create)
+			userRoutes.GET("/:id", middleware.RequirePermission("user:manage"), h.User.GetByID)
+			userRoutes.PUT("/:id", middleware.RequirePermission("user:manage"), h.User.Update)
+			userRoutes.PATCH("/:id/freeze", middleware.RequirePermission("user:manage"), h.User.Freeze)
+			userRoutes.PATCH("/:id/unfreeze", middleware.RequirePermission("user:manage"), h.User.Restore)
+		} else {
+			userRoutes.GET("", placeholder())
+			userRoutes.POST("", placeholder())
+			userRoutes.GET("/:id", placeholder())
+			userRoutes.PUT("/:id", placeholder())
+			userRoutes.PATCH("/:id/freeze", placeholder())
+			userRoutes.PATCH("/:id/unfreeze", placeholder())
+		}
+	}
 
-	// 角色权限
-	rg.GET("/roles", placeholder())                             // 角色列表
-	rg.POST("/roles", placeholder())                            // 创建角色
-	rg.PUT("/roles/:id", placeholder())                         // 更新角色
-	rg.GET("/menus", placeholder())                             // 菜单列表
-	rg.PUT("/roles/:id/menus", placeholder())                   // 更新角色菜单
+	// 角色权限（T15 — 已实现）
+	roleRoutes := rg.Group("/roles")
+	{
+		if h != nil && h.Role != nil {
+			roleRoutes.GET("", middleware.RequirePermission("user:manage"), h.Role.List)
+			roleRoutes.POST("", middleware.RequirePermission("user:manage"), h.Role.Create)
+			roleRoutes.GET("/:id", middleware.RequirePermission("user:manage"), h.Role.GetByID)
+			roleRoutes.PUT("/:id", middleware.RequirePermission("user:manage"), h.Role.Update)
+			roleRoutes.DELETE("/:id", middleware.RequirePermission("user:manage"), h.Role.Delete)
+		} else {
+			roleRoutes.GET("", placeholder())
+			roleRoutes.POST("", placeholder())
+			roleRoutes.GET("/:id", placeholder())
+			roleRoutes.PUT("/:id", placeholder())
+			roleRoutes.DELETE("/:id", placeholder())
+		}
+	}
 
-	// 数据看板
-	rg.GET("/dashboard/stats", placeholder())                   // 统计数据
-	rg.GET("/dashboard/trends", placeholder())                  // 趋势数据
+	// 菜单（占位 — T15 菜单权限绑定）
+	rg.GET("/menus", placeholder())
+	rg.PUT("/roles/:id/menus", placeholder())
 
-	// 操作日志
-	rg.GET("/audit-logs", placeholder())                        // 审计日志列表
+	// 数据看板（占位 — T32 实现）
+	rg.GET("/dashboard/stats", placeholder())
+	rg.GET("/dashboard/trends", placeholder())
 
-	// 系统配置
-	rg.GET("/configs/:key", placeholder())                      // 获取配置
-	rg.PUT("/configs/:key", placeholder())                      // 更新配置
-	rg.GET("/embedding-configs", placeholder())                 // Embedding 配置列表
-	rg.POST("/embedding-configs", placeholder())                // 创建 Embedding 配置
-	rg.PUT("/embedding-configs/:id", placeholder())             // 更新 Embedding 配置
+	// 操作日志（占位 — T33 实现）
+	rg.GET("/audit-logs", placeholder())
+
+	// 系统配置（占位 — T34 实现）
+	rg.GET("/configs/:key", placeholder())
+	rg.PUT("/configs/:key", placeholder())
+	rg.GET("/embedding-configs", placeholder())
+	rg.POST("/embedding-configs", placeholder())
+	rg.PUT("/embedding-configs/:id", placeholder())
 }
