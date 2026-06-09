@@ -11,6 +11,7 @@ type Ticket struct {
 	ID              int64          `gorm:"primaryKey;autoIncrement" json:"id"`
 	TicketNo        string         `gorm:"type:varchar(32);uniqueIndex;not null;column:ticket_no" json:"ticket_no"`
 	UserID          int64          `gorm:"not null;column:user_id;index:idx_tickets_user_id" json:"user_id"`
+	User            User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
 	Title           string         `gorm:"type:varchar(255);not null" json:"title"`
 	Description     string         `gorm:"type:text;not null" json:"description"`
 	Urgency         int16          `gorm:"not null" json:"urgency"`
@@ -22,6 +23,7 @@ type Ticket struct {
 	SupplementCount int16          `gorm:"not null;default:0;column:supplement_count" json:"supplement_count"`
 	ChatContext     datatypes.JSON `gorm:"type:jsonb;column:chat_context" json:"chat_context"`
 	Source          int16          `gorm:"not null;default:1" json:"source"`
+	TicketRecords   []TicketRecord `gorm:"foreignKey:TicketID" json:"ticket_records,omitempty"`
 	CreatedAt       time.Time      `gorm:"not null;index:idx_tickets_created_at" json:"created_at"`
 	UpdatedAt       time.Time      `gorm:"not null" json:"updated_at"`
 }
