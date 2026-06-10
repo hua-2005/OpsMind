@@ -265,8 +265,12 @@ func TestRagClient_SyncDocument_RawText(t *testing.T) {
 
 		var body map[string]interface{}
 		json.NewDecoder(r.Body).Decode(&body)
-		if body["title"] != "Q: 问题" {
-			t.Errorf("期望 title, got '%v'", body["title"])
+		md, ok := body["metadata"].(map[string]interface{})
+		if !ok || md["title"] != "Q: test" {
+			t.Errorf("expected metadata.title, got %v", body["metadata"])
+		}
+		if body["addToWorkspaces"] != "test-ws" {
+			t.Errorf("expected addToWorkspaces, got %v", body["addToWorkspaces"])
 		}
 
 		resp := map[string]interface{}{
@@ -281,7 +285,7 @@ func TestRagClient_SyncDocument_RawText(t *testing.T) {
 	ctx := context.Background()
 	result, err := client.SyncDocument(ctx, adapter.RAGSyncRequest{
 		WorkspaceSlug: "test-ws",
-		Title:         "Q: 问题",
+		Title:         "Q: test",
 		Content:       "A: 答案",
 		Mode:          "raw-text",
 	})
@@ -319,7 +323,7 @@ func TestRagClient_DisableDocument(t *testing.T) {
 
 	ctx := context.Background()
 	err := client.DisableDocument(ctx, adapter.RAGDisableRequest{
-		WorkspaceSlug:    "test-ws",
+		WorkspaceSlug:     "test-ws",
 		DocumentLocations: []string{"custom-documents/old-faq.json"},
 	})
 	if err != nil {
