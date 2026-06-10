@@ -50,9 +50,12 @@ build:
 up:
 	docker compose up -d --build
 
-# 一键启动含 vLLM 的完整环境
+# 启动含本地 vLLM 的完整 AI 环境（需要先下载模型: make model-download）
 up-ai:
 	docker compose --profile ai-local up -d --build
+	@echo ""
+	@echo "vLLM 已启动。如果使用 OpenAI/DeepSeek 等云 API，"
+	@echo "只需要 make up 并在 .env 中配置 LLM_BASE_URL 即可。"
 
 # 停止全部服务
 down:

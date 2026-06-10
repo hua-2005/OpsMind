@@ -148,11 +148,12 @@ services:
       JWT_SECRET: ${ANYTHINGLLM_JWT_SECRET}
       SIG_KEY: ${ANYTHINGLLM_SIG_KEY}
       SIG_SALT: ${ANYTHINGLLM_SIG_SALT}
+      # LLM 提供商：generic-openai 支持所有 OpenAI 兼容 API
       LLM_PROVIDER: generic-openai
-      GENERIC_OPEN_AI_BASE_PATH: ${VLLM_BASE_URL}
-      GENERIC_OPEN_AI_MODEL_PREF: ${VLLM_MODEL}
-      GENERIC_OPEN_AI_MODEL_TOKEN_LIMIT: ${VLLM_TOKEN_LIMIT:-8192}
-      GENERIC_OPEN_AI_API_KEY: ${VLLM_API_KEY}
+      GENERIC_OPEN_AI_BASE_PATH: ${LLM_BASE_URL}
+      GENERIC_OPEN_AI_MODEL_PREF: ${LLM_MODEL}
+      GENERIC_OPEN_AI_MODEL_TOKEN_LIMIT: ${LLM_TOKEN_LIMIT:-8192}
+      GENERIC_OPEN_AI_API_KEY: ${LLM_API_KEY}
       EMBEDDING_ENGINE: generic-openai
       EMBEDDING_BASE_PATH: ${EMBEDDING_BASE_URL}
       EMBEDDING_MODEL_PREF: ${EMBEDDING_MODEL}
@@ -224,99 +225,108 @@ networks:
     driver: bridge
 ```
 
-### 3.2 `.env` 推荐配置
+### 3.2 LLM 提供商配置
 
-OpsMind 根目录 `.env`：
+AnythingLLM 通过 `generic-openai` 提供商对接所有 OpenAI 兼容 API。编辑 `.env` 选择一种方案：
+
+<details>
+<summary><b>方案 A：本地 vLLM（推荐，完全本地化）</b></summary>
 
 ```dotenv
-# OpsMind
-POSTGRES_PASSWORD=opsmind_dev
-MINIO_ROOT_USER=minioadmin
-MINIO_ROOT_PASSWORD=minioadmin
-
-# AnythingLLM internal component
-ANYTHINGLLM_BASE_URL=http://anythingllm:3001/api
-ANYTHINGLLM_API_KEY=replace-after-create-api-key
-ANYTHINGLLM_JWT_SECRET=replace-with-random-string-20-plus
-ANYTHINGLLM_SIG_KEY=replace-with-random-string-32-plus
-ANYTHINGLLM_SIG_SALT=replace-with-random-string-32-plus
-
-# vLLM or compatible model service
-# 如果 vLLM 也在同一个 compose 网络里，使用 http://vllm:8000/v1。
-# 如果使用宿主机或远程模型服务，改成实际地址。
-VLLM_BASE_URL=http://vllm:8000/v1
-VLLM_MODEL=qwen2.5-7b-instruct
-VLLM_TOKEN_LIMIT=8192
-VLLM_API_KEY=dummy-key
-
-# Embedding service
+LLM_BASE_URL=http://vllm:8000/v1
+LLM_MODEL=qwen2.5-7b-instruct
+LLM_TOKEN_LIMIT=8192
+LLM_API_KEY=dummy-key
+# Embedding 也用 vLLM
 EMBEDDING_BASE_URL=http://vllm:8000/v1
 EMBEDDING_MODEL=bge-m3
-EMBEDDING_MAX_CHUNK_LENGTH=8192
 EMBEDDING_API_KEY=dummy-key
 ```
 
-### 3.3 下载 AI 模型（启用智能问答必需）
+需要先下载模型（见 §3.3），然后通过 `--profile ai-local` 启动。
+</details>
 
-> 基础功能（认证、用户管理、申告管理）不依赖 AI 模型。只有智能问答和知识库 RAG 检索需要模型。
+<details>
+<summary><b>方案 B：OpenAI 官方 API（最简单）</b></summary>
 
-需要下载两个模型：
+```dotenv
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
+LLM_TOKEN_LIMIT=16384
+LLM_API_KEY=sk-your-openai-api-key
+# Embedding
+EMBEDDING_BASE_URL=https://api.openai.com/v1
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_API_KEY=sk-your-openai-api-key
+```
 
-| 模型 | 用途 | 大小 | 推荐下载方式 |
-|------|------|------|------------|
-| Qwen2.5-7B-Instruct | 对话生成（LLM） | ~15 GB | ModelScope / HuggingFace |
-| BGE-M3 | 文本向量化（Embedding） | ~2.2 GB | ModelScope / HuggingFace |
+无需下载模型，`docker compose up -d` 即可。
+</details>
 
-**方式一：pip 命令行下载（推荐）**
+<details>
+<summary><b>方案 C：本地 Ollama（轻量级）</b></summary>
+
+```dotenv
+LLM_BASE_URL=http://host.docker.internal:11434/v1
+LLM_MODEL=qwen2.5:7b
+LLM_TOKEN_LIMIT=8192
+LLM_API_KEY=dummy-key
+# Embedding
+EMBEDDING_BASE_URL=http://host.docker.internal:11434/v1
+EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_API_KEY=dummy-key
+```
+
+需先安装 Ollama 并 `ollama pull` 模型，无需 Docker 内 vLLM。
+</details>
+
+<details>
+<summary><b>方案 D：其他兼容 API（DeepSeek / Moonshot / 等）</b></summary>
+
+```dotenv
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+LLM_TOKEN_LIMIT=16384
+LLM_API_KEY=sk-your-api-key
+```
+
+替换为对应服务的地址和 Key 即可。
+</details>
+
+完整的 `.env` 模板见项目根目录 `.env.example`。
+
+### 3.3 下载本地模型（仅方案 A：vLLM 需要）
+
+> 使用 OpenAI / DeepSeek 等云 API 可跳过此步骤。
+
+| 模型 | 用途 | 大小 |
+|------|------|------|
+| Qwen2.5-7B-Instruct | 对话生成 | ~15 GB |
+| BGE-M3 | 文本向量化 | ~2.2 GB |
+
+**ModelScope 下载（国内推荐）：**
 
 ```powershell
-# 安装 ModelScope CLI
 pip install modelscope
-
-# 进入项目根目录
 cd D:\Projects\Personal\OpsMind
-
-# 下载对话模型
 modelscope download --model Qwen/Qwen2.5-7B-Instruct --local_dir ./models/qwen2.5-7b-instruct
-
-# 下载 Embedding 模型
 modelscope download --model BAAI/bge-m3 --local_dir ./models/bge-m3
 ```
 
-或使用项目 Makefile 一键下载：
+或使用 Makefile：`make model-download`
 
-```bash
-make model-download
-```
-
-**方式二：HuggingFace 下载**
+**HuggingFace 下载：**
 
 ```powershell
 pip install huggingface_hub
-
-# 国内用户先设置镜像
 set HF_ENDPOINT=https://hf-mirror.com
-
 huggingface-cli download Qwen/Qwen2.5-7B-Instruct --local-dir ./models/qwen2.5-7b-instruct
 huggingface-cli download BAAI/bge-m3 --local-dir ./models/bge-m3
 ```
 
-**配置 vLLM 启动参数：**
+**配置并启动：**
 
-编辑 `docker-compose.yml`，取消 vllm 服务的 `command` 注释：
-
-```yaml
-vllm:
-  command:
-    - "--model"
-    - "/models/qwen2.5-7b-instruct"
-    - "--served-model-name"
-    - "qwen2.5-7b-instruct"
-```
-
-如有 GPU，取消 `deploy.resources.reservations.devices` 注释以启用 GPU 加速。
-
-下载完成后启动含 vLLM 的完整环境：
+编辑 `docker-compose.yml` 取消 vllm 服务的 `command` 注释，然后：
 
 ```powershell
 docker compose --profile ai-local up -d --build

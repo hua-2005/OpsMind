@@ -79,94 +79,89 @@ docker compose ps
 
 ---
 
-### 第二步（可选）：下载模型启用 AI 问答
+### 第二步（可选）：配置 LLM 启用 AI 问答
 
-> OpsMind 的基础功能（认证、用户管理、申告管理）不依赖 AI 模型。只有**智能问答**和**知识库 RAG 检索**需要 vLLM + Embedding 模型。
+> OpsMind 的基础功能（认证、用户管理、申告管理）不依赖 AI 模型。只有**智能问答**和**知识库 RAG 检索**需要 LLM + Embedding 服务。
 
-#### 2.1 下载对话模型（Qwen2.5-7B-Instruct）
+AnythingLLM 通过 `generic-openai` 提供商支持**所有 OpenAI 兼容 API**。选择下面一种方案，在 `.env` 中填写对应的 `LLM_*` 配置即可。
 
-<details>
-<summary><b>方案 A：ModelScope 下载（国内推荐，速度快）</b></summary>
+#### 方案对比
+
+| 方案 | 成本 | 延迟 | 数据隐私 | 需要 GPU | 配置难度 |
+|------|------|------|----------|----------|----------|
+| **A: 本地 vLLM** | 免费 | 低 | ✅ 完全本地 | ✅ 需要 | ⭐⭐⭐ |
+| **B: OpenAI API** | 按量付费 | 中 | ❌ 上传云端 | 不需要 | ⭐ |
+| **C: 本地 Ollama** | 免费 | 低 | ✅ 完全本地 | 不需要 | ⭐⭐ |
+| **D: 其他兼容 API** | 各异 | 各异 | 各异 | 不需要 | ⭐ |
+
+---
+
+#### 方案 A：本地 vLLM（推荐，数据不出域）
 
 ```bash
-# 安装 modelscope
+# 1. 下载模型（约 17 GB）
 pip install modelscope
-
-# 下载模型到项目 models 目录
-cd OpsMind
 modelscope download --model Qwen/Qwen2.5-7B-Instruct --local_dir ./models/qwen2.5-7b-instruct
-```
-
-模型大小约 15 GB，下载时间取决于网络。
-</details>
-
-<details>
-<summary><b>方案 B：HuggingFace 下载（国际）</b></summary>
-
-```bash
-# 安装 huggingface_hub
-pip install huggingface_hub
-
-cd OpsMind
-huggingface-cli download Qwen/Qwen2.5-7B-Instruct --local-dir ./models/qwen2.5-7b-instruct
-```
-
-国内用户如速度慢，可设置镜像：
-```bash
-export HF_ENDPOINT=https://hf-mirror.com
-```
-</details>
-
-<details>
-<summary><b>方案 C：Ollama 下载（最简单，但需额外转换）</b></summary>
-
-```bash
-# 安装 Ollama 后拉取模型
-ollama pull qwen2.5:7b
-
-# Ollama 模型存储在 ~/.ollama/models/，
-# 需使用 vLLM 时建议用方案 A/B 直接下载原始权重
-```
-</details>
-
-#### 2.2 下载 Embedding 模型（BGE-M3）
-
-```bash
-# ModelScope（推荐）
 modelscope download --model BAAI/bge-m3 --local_dir ./models/bge-m3
+# 或使用 Makefile: make model-download
 
-# 或 HuggingFace
-huggingface-cli download BAAI/bge-m3 --local-dir ./models/bge-m3
-```
+# 2. .env 保持默认配置（已预设 vLLM）
+# LLM_BASE_URL=http://vllm:8000/v1
+# LLM_MODEL=qwen2.5-7b-instruct
 
-模型大小约 2.2 GB。
-
-#### 2.3 配置 vLLM 启动参数
-
-编辑 `docker-compose.yml` 中 vLLM 服务的 `command`：
-
-```yaml
-vllm:
-  command:
-    - "--model"
-    - "/models/qwen2.5-7b-instruct"
-    - "--served-model-name"
-    - "qwen2.5-7b-instruct"
-    - "--host"
-    - "0.0.0.0"
-    - "--port"
-    - "8000"
-```
-
-如有 GPU，取消 `deploy.resources.reservations.devices` 注释启用 GPU 加速。
-
-#### 2.4 启动含 vLLM 的完整环境
-
-```bash
+# 3. 取消 docker-compose.yml 中 vllm 服务的 command 注释
+# 4. 启动
 docker compose --profile ai-local up -d --build
 ```
 
-> ⚠️ 首次启动需加载模型到显存，可能需要 1-3 分钟。之后 AnythingLLM 配置完成即可使用 AI 问答。
+> 如有 NVIDIA GPU，取消 `deploy.resources.reservations.devices` 注释启用 GPU 加速。
+
+#### 方案 B：OpenAI 官方 API（最简单）
+
+```bash
+# 编辑 .env，改用 OpenAI 配置：
+# LLM_BASE_URL=https://api.openai.com/v1
+# LLM_MODEL=gpt-4o-mini
+# LLM_API_KEY=sk-your-openai-api-key
+#
+# Embedding 也用 OpenAI:
+# EMBEDDING_BASE_URL=https://api.openai.com/v1
+# EMBEDDING_MODEL=text-embedding-3-small
+# EMBEDDING_API_KEY=sk-your-openai-api-key
+
+# 启动（无需 vLLM profile）
+docker compose up -d --build
+```
+
+#### 方案 C：本地 Ollama（轻量级，无需 GPU，无需下载原始权重）
+
+```bash
+# 1. 安装 Ollama 并拉取模型
+ollama pull qwen2.5:7b
+ollama pull nomic-embed-text   # Ollama 自带的 embedding 模型
+
+# 2. 编辑 .env：
+# LLM_BASE_URL=http://host.docker.internal:11434/v1
+# LLM_MODEL=qwen2.5:7b
+# LLM_API_KEY=dummy-key
+# EMBEDDING_BASE_URL=http://host.docker.internal:11434/v1
+# EMBEDDING_MODEL=nomic-embed-text
+# EMBEDDING_API_KEY=dummy-key
+
+# 3. 启动（无需 vLLM profile）
+docker compose up -d --build
+```
+
+#### 方案 D：DeepSeek / Moonshot 等国内 API
+
+```bash
+# 编辑 .env 即可，无需下载模型：
+# LLM_BASE_URL=https://api.deepseek.com/v1
+# LLM_MODEL=deepseek-chat
+# LLM_API_KEY=sk-your-deepseek-api-key
+```
+
+> 更多 OpenAI 兼容服务参见 [ANYTHINGLLM_AI_INTEGRATION.md](docs/ANYTHINGLLM_AI_INTEGRATION.md)。
 
 ---
 
