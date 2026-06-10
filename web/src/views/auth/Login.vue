@@ -70,8 +70,12 @@ const handleLogin = async () => {
     // 首次登录跳转修改密码页
     if (data.user.first_login) {
       router.push('/change-password')
-    } else {
+    } else if (data.permissions && data.permissions.length > 0) {
+      // 有后台权限的用户（管理员/运维/知识库管理员）跳转后台
       router.push('/admin')
+    } else {
+      // 报障人无后台权限，跳转门户端
+      router.push('/portal')
     }
   } catch (err: any) {
     error.value = err?.message || '登录失败，请检查网络连接'

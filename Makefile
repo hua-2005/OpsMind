@@ -9,7 +9,7 @@
 #   make migrate      运行数据库迁移
 #   make seed         加载演示数据
 
-.PHONY: dev build up down test migrate seed clean help model-download
+.PHONY: dev build up down test migrate seed db-reset db-init db-drop clean help model-download
 
 # 默认目标
 help:
@@ -23,6 +23,9 @@ help:
 	@echo "  make test            运行全部测试"
 	@echo "  make test-integration 运行集成测试"
 	@echo "  make seed            加载演示数据"
+	@echo "  make db-reset        清空所有数据（保留表结构）"
+	@echo "  make db-init         清空并重新加载演示数据"
+	@echo "  make db-drop         仅清空数据"
 	@echo "  make model-download  下载 vLLM 对话模型和 Embedding 模型"
 	@echo "  make clean           清理构建产物和运行时数据"
 
@@ -88,6 +91,19 @@ migrate:
 seed:
 	docker compose exec -T postgres psql -U opsmind -d opsmind < server/migrations/seed.sql
 	@echo "演示数据加载完成"
+
+# 清空所有数据（保留表结构）
+db-reset:
+	docker compose exec -T postgres psql -U opsmind -d opsmind < scripts/reset-db.sql
+	@echo "数据库已清空"
+
+# 清空并重新加载演示数据（一键初始化数据库）
+db-init:
+	@bash scripts/seed-db.sh --reset
+
+# 仅清空数据
+db-drop:
+	@bash scripts/seed-db.sh --drop
 
 # ===== 模型下载 =====
 
