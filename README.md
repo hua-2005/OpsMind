@@ -34,65 +34,202 @@
 
 ## 快速启动
 
-### 方式一：Docker Compose 一键启动（推荐）
+> **第一次部署？** 按顺序执行下面 4 个步骤：基础服务 → 模型下载(可选) → API Key 初始化 → 演示数据。
+
+### 前置条件
+
+- **Docker Desktop** 4.x+（含 Docker Compose v2）
+- **磁盘空间** ≥ 20 GB（含镜像和模型）
+- **内存** ≥ 16 GB（若启用 vLLM）
+- **GPU**（可选）：NVIDIA GPU + nvidia-container-toolkit（vLLM 推理需要）
+
+---
+
+### 第一步：启动基础服务
 
 ```bash
-# 1. 克隆项目
-git clone <repo-url> OpsMind
+# 克隆项目
+git clone https://github.com/int2t05/OpsMind.git
 cd OpsMind
 
-# 2. 配置环境变量
+# 配置环境变量
 cp .env.example .env
-# 编辑 .env，设置 OPSMIND_JWT_SECRET 等必要变量
+# 编辑 .env，至少设置：
+#   OPSMIND_JWT_SECRET=<随机字符串 32 位以上>
+# 其余配置使用默认值即可
 
-# 3. 一键启动全部服务（不含 vLLM）
+# 构建并启动基础服务（不含 vLLM/AnythingLLM 管理页面）
 docker compose up -d --build
+```
 
-# 4. 加载演示数据
-docker compose exec -T postgres psql -U opsmind -d opsmind < server/migrations/seed.sql
+等待约 1-2 分钟，验证服务状态：
 
-# 5. 访问
-# 前端: http://localhost:5173
-# 后端 API: http://localhost:8080
-# MinIO 控制台: http://localhost:9001
+```bash
+docker compose ps
+# 期望输出：opsmind-postgres (healthy)、opsmind-minio、opsmind-server、opsmind-web 均为 Up
+```
 
-# 6. （可选）含 vLLM 的完整 AI 环境
+访问验证：
+
+| 地址 | 说明 |
+|------|------|
+| http://localhost:5173 | 前端页面 |
+| http://localhost:8080 | 后端 API |
+| http://localhost:9001 | MinIO 管理控制台（minioadmin / minioadmin） |
+
+---
+
+### 第二步（可选）：下载模型启用 AI 问答
+
+> OpsMind 的基础功能（认证、用户管理、申告管理）不依赖 AI 模型。只有**智能问答**和**知识库 RAG 检索**需要 vLLM + Embedding 模型。
+
+#### 2.1 下载对话模型（Qwen2.5-7B-Instruct）
+
+<details>
+<summary><b>方案 A：ModelScope 下载（国内推荐，速度快）</b></summary>
+
+```bash
+# 安装 modelscope
+pip install modelscope
+
+# 下载模型到项目 models 目录
+cd OpsMind
+modelscope download --model Qwen/Qwen2.5-7B-Instruct --local_dir ./models/qwen2.5-7b-instruct
+```
+
+模型大小约 15 GB，下载时间取决于网络。
+</details>
+
+<details>
+<summary><b>方案 B：HuggingFace 下载（国际）</b></summary>
+
+```bash
+# 安装 huggingface_hub
+pip install huggingface_hub
+
+cd OpsMind
+huggingface-cli download Qwen/Qwen2.5-7B-Instruct --local-dir ./models/qwen2.5-7b-instruct
+```
+
+国内用户如速度慢，可设置镜像：
+```bash
+export HF_ENDPOINT=https://hf-mirror.com
+```
+</details>
+
+<details>
+<summary><b>方案 C：Ollama 下载（最简单，但需额外转换）</b></summary>
+
+```bash
+# 安装 Ollama 后拉取模型
+ollama pull qwen2.5:7b
+
+# Ollama 模型存储在 ~/.ollama/models/，
+# 需使用 vLLM 时建议用方案 A/B 直接下载原始权重
+```
+</details>
+
+#### 2.2 下载 Embedding 模型（BGE-M3）
+
+```bash
+# ModelScope（推荐）
+modelscope download --model BAAI/bge-m3 --local_dir ./models/bge-m3
+
+# 或 HuggingFace
+huggingface-cli download BAAI/bge-m3 --local-dir ./models/bge-m3
+```
+
+模型大小约 2.2 GB。
+
+#### 2.3 配置 vLLM 启动参数
+
+编辑 `docker-compose.yml` 中 vLLM 服务的 `command`：
+
+```yaml
+vllm:
+  command:
+    - "--model"
+    - "/models/qwen2.5-7b-instruct"
+    - "--served-model-name"
+    - "qwen2.5-7b-instruct"
+    - "--host"
+    - "0.0.0.0"
+    - "--port"
+    - "8000"
+```
+
+如有 GPU，取消 `deploy.resources.reservations.devices` 注释启用 GPU 加速。
+
+#### 2.4 启动含 vLLM 的完整环境
+
+```bash
 docker compose --profile ai-local up -d --build
 ```
 
-### 方式二：本地开发（Go + Vue + Docker 依赖服务）
+> ⚠️ 首次启动需加载模型到显存，可能需要 1-3 分钟。之后 AnythingLLM 配置完成即可使用 AI 问答。
 
-#### 前置条件
+---
 
-- **Go** 1.22+
-- **Node.js** 18+
-- **Docker Desktop**（提供 PostgreSQL + MinIO）
-- **Git Bash** 或 WSL（Windows 推荐）
+### 第三步：初始化 AnythingLLM API Key
 
-#### 1. 启动依赖服务
+AnythingLLM 首次启动后需要手动创建 API Key：
 
 ```bash
-make dev
-# 或手动: docker compose up -d postgres minio
+# 1. 编辑 docker-compose.yml，取消 anythingllm 服务 ports 的注释
+#    将 # ports: 和 #   - "3001:3001" 两行的 # 删除
+#    保存后执行：
+docker compose up -d anythingllm
+
+# 2. 浏览器打开 http://localhost:3001，完成初始化向导
+#    - 设置管理员账号
+#    - LLM 偏好选 "Generic OpenAI"（vLLM 兼容 OpenAI API）
+#    - Embedding 偏好选 "Generic OpenAI Embedding"
+#    - 向量数据库选 "LanceDB"（默认）
+
+# 3. 进入 Settings → API Keys → "Create API Key"
+#    复制 Key，写入项目根目录 .env：
+#    ANYTHINGLLM_API_KEY=sk-xxxxxxxxxxxxxxxx
+
+# 4. 创建知识库工作区（API 方式或管理页面均可）：
+#    管理页面 → Workspaces → New Workspace
+#    slug 设为 "opsmind-it-ops"（与 config.yaml 一致）
+
+# 5. 关闭管理端口（注释掉 ports）并重启
+docker compose up -d --build
 ```
 
-#### 2. 启动 Go 后端
+> **完成以上 4 步后**，访问 http://localhost:5173 即可使用完整功能。验证 AI 问答是否正常：
+> ```bash
+> # 先用 admin 登录获取 token，然后在门户端提问测试
+> curl -s http://localhost:8080/api/v1/portal/chat-sessions \
+>   -H "Authorization: Bearer <token>" \
+>   -H "Content-Type: application/json" \
+>   -d '{"question":"如何重置VPN密码？","kb_id":1}'
+> ```
+
+---
+
+### 第四步：加载演示数据
 
 ```bash
-cd server
-go mod tidy
-go run ./cmd/main.go
+# 加载预设角色、用户、知识库、申告等
+docker compose exec -T postgres psql -U opsmind -d opsmind < server/migrations/seed.sql
 ```
 
-#### 3. 启动 Vue 前端
+---
+
+### ✅ 验证完成
 
 ```bash
-cd web
-npm install
-npm run dev
-```
+# 登录测试
+curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"Admin@123"}' | grep -o '"code":[0-9]*'
+# 期望输出: "code":0
 
-访问 `http://localhost:5173`
+# 打开浏览器访问 http://localhost:5173
+# 使用 admin / Admin@123 登录
+```
 
 ---
 

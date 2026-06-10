@@ -256,7 +256,73 @@ EMBEDDING_MAX_CHUNK_LENGTH=8192
 EMBEDDING_API_KEY=dummy-key
 ```
 
-### 3.3 初始化 API Key
+### 3.3 下载 AI 模型（启用智能问答必需）
+
+> 基础功能（认证、用户管理、申告管理）不依赖 AI 模型。只有智能问答和知识库 RAG 检索需要模型。
+
+需要下载两个模型：
+
+| 模型 | 用途 | 大小 | 推荐下载方式 |
+|------|------|------|------------|
+| Qwen2.5-7B-Instruct | 对话生成（LLM） | ~15 GB | ModelScope / HuggingFace |
+| BGE-M3 | 文本向量化（Embedding） | ~2.2 GB | ModelScope / HuggingFace |
+
+**方式一：pip 命令行下载（推荐）**
+
+```powershell
+# 安装 ModelScope CLI
+pip install modelscope
+
+# 进入项目根目录
+cd D:\Projects\Personal\OpsMind
+
+# 下载对话模型
+modelscope download --model Qwen/Qwen2.5-7B-Instruct --local_dir ./models/qwen2.5-7b-instruct
+
+# 下载 Embedding 模型
+modelscope download --model BAAI/bge-m3 --local_dir ./models/bge-m3
+```
+
+或使用项目 Makefile 一键下载：
+
+```bash
+make model-download
+```
+
+**方式二：HuggingFace 下载**
+
+```powershell
+pip install huggingface_hub
+
+# 国内用户先设置镜像
+set HF_ENDPOINT=https://hf-mirror.com
+
+huggingface-cli download Qwen/Qwen2.5-7B-Instruct --local-dir ./models/qwen2.5-7b-instruct
+huggingface-cli download BAAI/bge-m3 --local-dir ./models/bge-m3
+```
+
+**配置 vLLM 启动参数：**
+
+编辑 `docker-compose.yml`，取消 vllm 服务的 `command` 注释：
+
+```yaml
+vllm:
+  command:
+    - "--model"
+    - "/models/qwen2.5-7b-instruct"
+    - "--served-model-name"
+    - "qwen2.5-7b-instruct"
+```
+
+如有 GPU，取消 `deploy.resources.reservations.devices` 注释以启用 GPU 加速。
+
+下载完成后启动含 vLLM 的完整环境：
+
+```powershell
+docker compose --profile ai-local up -d --build
+```
+
+### 3.4 初始化 API Key
 
 AnythingLLM 的 API Key 必须由 AnythingLLM 系统生成。初始化阶段允许临时暴露管理端口：
 
@@ -279,19 +345,19 @@ docker compose up -d anythingllm
 http://localhost:3001
 ```
 
-完成初始化后，在 `General Settings > API Keys` 创建 API Key，写入 OpsMind 根目录 `.env`：
+完成初始化向导后（LLM 选 Generic OpenAI、Embedding 选 Generic OpenAI Embedding、Vector DB 选 LanceDB），在 `Settings → API Keys` 创建 API Key，写入 `.env`：
 
 ```dotenv
 ANYTHINGLLM_API_KEY=刚创建的APIKey
 ```
 
-然后建议移除或注释 `anythingllm` 的 `ports`，让 AnythingLLM 只在 Docker 内网可见：
+然后注释掉 `ports`，让 AnythingLLM 只在 Docker 内网可见：
 
 ```powershell
 docker compose up -d --build
 ```
 
-日常使用只打开：
+日常使用只访问 OpsMind 前端：
 
 ```text
 http://localhost:5173

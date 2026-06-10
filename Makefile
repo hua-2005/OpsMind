@@ -9,20 +9,22 @@
 #   make migrate      运行数据库迁移
 #   make seed         加载演示数据
 
-.PHONY: dev build up down test migrate seed clean help
+.PHONY: dev build up down test migrate seed clean help model-download
 
 # 默认目标
 help:
 	@echo "OpsMind 构建和开发命令"
 	@echo ""
-	@echo "  make dev          本地开发启动（仅启动依赖服务）"
-	@echo "  make build        构建全部 Docker 镜像"
-	@echo "  make up           启动全部服务"
-	@echo "  make down         停止全部服务"
-	@echo "  make test         运行全部测试"
-	@echo "  make migrate      运行数据库自动迁移"
-	@echo "  make seed         加载演示数据"
-	@echo "  make clean        清理构建产物和运行时数据"
+	@echo "  make dev             本地开发启动（仅启动依赖服务）"
+	@echo "  make build           构建全部 Docker 镜像"
+	@echo "  make up              启动全部服务（不含 vLLM）"
+	@echo "  make up-ai           启动含 vLLM 的完整 AI 环境"
+	@echo "  make down            停止全部服务"
+	@echo "  make test            运行全部测试"
+	@echo "  make test-integration 运行集成测试"
+	@echo "  make seed            加载演示数据"
+	@echo "  make model-download  下载 vLLM 对话模型和 Embedding 模型"
+	@echo "  make clean           清理构建产物和运行时数据"
 
 # ===== 本地开发 =====
 
@@ -83,6 +85,20 @@ migrate:
 seed:
 	docker compose exec -T postgres psql -U opsmind -d opsmind < server/migrations/seed.sql
 	@echo "演示数据加载完成"
+
+# ===== 模型下载 =====
+
+# 下载 vLLM 对话模型（Qwen2.5-7B-Instruct）和 Embedding 模型（BGE-M3）
+# 需要先安装：pip install modelscope
+model-download:
+	@echo "下载对话模型 Qwen2.5-7B-Instruct (~15 GB)..."
+	python -c "from modelscope import snapshot_download; snapshot_download('Qwen/Qwen2.5-7B-Instruct', local_dir='./models/qwen2.5-7b-instruct')"
+	@echo ""
+	@echo "下载 Embedding 模型 BGE-M3 (~2.2 GB)..."
+	python -c "from modelscope import snapshot_download; snapshot_download('BAAI/bge-m3', local_dir='./models/bge-m3')"
+	@echo ""
+	@echo "模型下载完成！模型文件位于 ./models/ 目录"
+	@echo "现在可以运行: make up-ai"
 
 # ===== 清理 =====
 
