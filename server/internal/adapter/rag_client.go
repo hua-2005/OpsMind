@@ -82,7 +82,9 @@ type RAGDisableRequest struct {
 
 // RAGCreateWorkspaceRequest 工作区创建请求。
 type RAGCreateWorkspaceRequest struct {
-	Name string `json:"name"` // 工作区名称
+	Name            string `json:"name"`             // 工作区名称
+	EmbeddingEngine string `json:"embeddingEngine,omitempty"`   // embedding 引擎
+	EmbeddingModel  string `json:"embeddingModelPref,omitempty"` // embedding 模型
 }
 
 // RAGCreateWorkspaceResponse 工作区创建响应。
@@ -243,10 +245,23 @@ type anythingLLMWorkspaceResponse struct {
 }
 
 // CreateWorkspace 在 AnythingLLM 中创建工作区。
+//
+// 为什么显式传 embedding 配置：AnythingLLM workspace/new 可能不读取系统级
+// EMBEDDING_ENGINE/EMBEDDING_MODEL_PREF 默认值，导致默认 NativeEmbedder。
 func (c *AnythingLLMClient) CreateWorkspace(ctx context.Context, req RAGCreateWorkspaceRequest) (*RAGCreateWorkspaceResponse, error) {
 	url := fmt.Sprintf("%s/v1/workspace/new", c.baseURL)
 
-	body, err := json.Marshal(map[string]string{"name": req.Name})
+	payload := map[string]interface{}{
+		"name": req.Name,
+	}
+	// 如果提供了 embedding 配置，创建时显式设置
+	if req.EmbeddingEngine != "" {
+		payload["embeddingEngine"] = req.EmbeddingEngine
+	}
+	if req.EmbeddingModel != "" {
+		payload["embeddingModelPref"] = req.EmbeddingModel
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("序列化请求失败: %w", err)
 	}

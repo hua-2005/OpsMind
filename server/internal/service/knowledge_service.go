@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pgvector/pgvector-go"
+
 	"opsmind/internal/adapter"
 	"opsmind/internal/dto/request"
 	"opsmind/internal/dto/response"
@@ -45,7 +47,9 @@ func (s *KnowledgeService) CreateKB(req request.CreateKBRequest, userID int64) e
 	// 调用 RagClient 创建工作区
 	ctx := context.Background()
 	wsResp, err := s.rag.CreateWorkspace(ctx, adapter.RAGCreateWorkspaceRequest{
-		Name: req.Name,
+		Name:            req.Name,
+		EmbeddingModel:  req.EmbeddingModel,
+		EmbeddingEngine: "generic-openai",
 	})
 	if err != nil {
 		return AppError{Code: errcode.ErrRAGUnavailable, Message: "创建 RAG 工作区失败: " + err.Error()}
@@ -261,6 +265,7 @@ func (s *KnowledgeService) Publish(id int64, publisherID int64) error {
 			_ = s.repo.CreateChunks([]model.KnowledgeChunk{{
 				ArticleID:       id,
 				Content:         article.Answer,
+				Embedding:       pgvector.NewVector([]float32{0}),
 				EmbeddingModel:  article.KnowledgeBase.EmbeddingModel,
 				VectorDimension: article.KnowledgeBase.VectorDimension,
 				SyncStatus:      "synced",
