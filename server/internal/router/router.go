@@ -55,9 +55,15 @@ func Setup(cfg *config.AppConfig, h *Handlers) *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// 公开路由组（无需认证）
+	// 公开路由组（无需认证）— 仅登录和刷新令牌
 	public := r.Group("/api/v1/auth")
 	registerPublicRoutes(public, h)
+
+	// JWT 认证路由（需要登录但不需要 RBAC）— 修改密码和登出
+	// 为什么不在 public 组：ChangePassword handler 依赖 JWT 中间件注入的 userID
+	authRequired := r.Group("/api/v1/auth")
+	authRequired.Use(middleware.JWTAuth(cfg.JWT.Secret))
+	registerAuthRequiredRoutes(authRequired, h)
 
 	// 门户端路由组（需要 JWT 认证）
 	portal := r.Group("/api/v1/portal")
@@ -89,11 +95,21 @@ func registerPublicRoutes(rg *gin.RouterGroup, h *Handlers) {
 	if h != nil && h.Auth != nil {
 		rg.POST("/login", h.Auth.Login)
 		rg.POST("/refresh", h.Auth.Refresh)
-		rg.POST("/change-password", h.Auth.ChangePassword)
-		rg.POST("/logout", h.Auth.Logout)
 	} else {
 		rg.POST("/login", placeholder())
 		rg.POST("/refresh", placeholder())
+	}
+}
+
+// registerAuthRequiredRoutes 注册需要 JWT 认证的 auth 路由。
+//
+// 与 registerPublicRoutes 使用同样的 /api/v1/auth 前缀但附加 JWTAuth 中间件，
+// 原因是 ChangePassword handler 需要 JWT 中间件注入的 userID 来识别当前用户。
+func registerAuthRequiredRoutes(rg *gin.RouterGroup, h *Handlers) {
+	if h != nil && h.Auth != nil {
+		rg.POST("/change-password", h.Auth.ChangePassword)
+		rg.POST("/logout", h.Auth.Logout)
+	} else {
 		rg.POST("/change-password", placeholder())
 		rg.POST("/logout", placeholder())
 	}

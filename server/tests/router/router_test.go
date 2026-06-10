@@ -49,7 +49,7 @@ func TestPublicRoutes_Exist(t *testing.T) {
 	}
 }
 
-// TestPublicRoutes_Return501 测试公开路由占位返回 501
+// TestPublicRoutes_Return501 测试公开路由（无需认证）占位返回 501
 func TestPublicRoutes_Return501(t *testing.T) {
 	tests := []struct {
 		method string
@@ -57,8 +57,6 @@ func TestPublicRoutes_Return501(t *testing.T) {
 	}{
 		{"POST", "/api/v1/auth/login"},
 		{"POST", "/api/v1/auth/refresh"},
-		{"POST", "/api/v1/auth/change-password"},
-		{"POST", "/api/v1/auth/logout"},
 	}
 
 	for _, tt := range tests {
@@ -81,6 +79,30 @@ func TestPublicRoutes_Return501(t *testing.T) {
 	}
 }
 
+// TestAuthRequiredRoutes_RequireJWT 测试需要 JWT 的 auth 路由无 token 返回 401
+func TestAuthRequiredRoutes_RequireJWT(t *testing.T) {
+	tests := []struct {
+		method string
+		path   string
+	}{
+		{"POST", "/api/v1/auth/change-password"},
+		{"POST", "/api/v1/auth/logout"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			r := setupRouter()
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest(tt.method, tt.path, nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("期望状态码 401（需要 JWT），实际 %d", w.Code)
+			}
+		})
+	}
+}
+
 // TestPortalRoutes_Exist 测试门户端路由存在
 func TestPortalRoutes_Exist(t *testing.T) {
 	tests := []struct {
@@ -95,7 +117,7 @@ func TestPortalRoutes_Exist(t *testing.T) {
 		{"GET", "/api/v1/portal/tickets/1"},
 		{"PATCH", "/api/v1/portal/tickets/1/supplement"},
 		{"GET", "/api/v1/portal/messages"},
-		{"PATCH", "/api/v1/portal/messages/1/read"},
+		{"PUT", "/api/v1/portal/messages/1/read"},
 		{"GET", "/api/v1/portal/messages/unread-count"},
 	}
 
@@ -130,14 +152,15 @@ func TestAdminRoutes_Exist(t *testing.T) {
 		{"GET", "/api/v1/admin/knowledge-bases"},
 		{"POST", "/api/v1/admin/knowledge-bases"},
 		{"PUT", "/api/v1/admin/knowledge-bases/1"},
-		{"GET", "/api/v1/admin/knowledge-articles"},
-		{"POST", "/api/v1/admin/knowledge-articles"},
-		{"PUT", "/api/v1/admin/knowledge-articles/1"},
-		{"POST", "/api/v1/admin/knowledge-articles/1/submit-review"},
-		{"POST", "/api/v1/admin/knowledge-articles/1/review"},
-		{"POST", "/api/v1/admin/knowledge-articles/1/publish"},
-		{"POST", "/api/v1/admin/knowledge-articles/1/disable"},
-		{"POST", "/api/v1/admin/knowledge-articles/1/retry-sync"},
+		{"GET", "/api/v1/admin/knowledge-bases/1/articles"},
+		{"POST", "/api/v1/admin/knowledge-bases/1/articles"},
+		{"PUT", "/api/v1/admin/articles/1"},
+		{"GET", "/api/v1/admin/articles/1"},
+		{"POST", "/api/v1/admin/articles/1/submit-review"},
+		{"POST", "/api/v1/admin/articles/1/review"},
+		{"POST", "/api/v1/admin/articles/1/publish"},
+		{"POST", "/api/v1/admin/articles/1/disable"},
+		{"POST", "/api/v1/admin/articles/1/retry-sync"},
 
 		// 用户管理
 		{"GET", "/api/v1/admin/users"},
