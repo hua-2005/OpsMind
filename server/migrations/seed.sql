@@ -1,4 +1,4 @@
--- OpsMind 演示数据
+-- OpsMind v2 演示数据
 --
 -- 加载方式：
 --   docker compose exec -T postgres psql -U opsmind -d opsmind < server/migrations/seed.sql
@@ -19,7 +19,7 @@ DELETE FROM tickets;
 DELETE FROM knowledge_chunks;
 DELETE FROM knowledge_articles;
 DELETE FROM knowledge_bases;
-DELETE FROM embedding_configs;
+DELETE FROM llm_configs;
 DELETE FROM role_menus;
 DELETE FROM user_roles;
 DELETE FROM menus;
@@ -45,7 +45,7 @@ INSERT INTO menus (id, name, path, icon, parent_id, sort_order, type) VALUES
 (5, '角色管理', '/admin/roles', 'shield', 0, 5, 'menu'),
 (6, '审计日志', '/admin/audit-logs', 'file-text', 0, 6, 'menu'),
 (7, '模型配置', '/admin/model-config', 'cpu', 0, 7, 'menu'),
-(8, 'Embedding配置', '/admin/embedding-config', 'layers', 0, 8, 'menu'),
+(8, 'LLM配置', '/admin/llm-config', 'cpu', 0, 8, 'menu'),
 (9, '系统配置', '/admin/system-config', 'settings', 0, 9, 'menu');
 
 SELECT setval('menus_id_seq', (SELECT MAX(id) FROM menus));
@@ -70,52 +70,50 @@ SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 INSERT INTO user_roles (user_id, role_id) VALUES
 (1, 1), (2, 2), (3, 2), (4, 3), (5, 4), (6, 4);
 
--- ===== 系统配置（updated_at 无默认值）=====
+-- ===== 系统配置 =====
 INSERT INTO system_configs (key, value, updated_by, updated_at) VALUES
-('ai.default_top_k', '"5"', 1, NOW()),
-('ai.confidence_threshold', '"0.6"', 1, NOW()),
 ('app.name', '"OpsMind"', 1, NOW());
 
--- ===== Embedding 配置（时间列有默认值）=====
-INSERT INTO embedding_configs (id, name, model_type, api_endpoint, vector_dimension, is_default, created_at) VALUES
-(1, 'BGE-M3 (本地 vLLM)', 2, NULL, 1024, true, NOW()),
-(2, 'text-embedding-ada-002', 1, 'https://api.openai.com/v1/embeddings', 1536, false, NOW());
+-- ===== LLM 配置（v2 新增，替代 v1 embedding_configs）=====
+INSERT INTO llm_configs (id, name, provider_type, base_url, api_key, llm_model, embedding_model, max_tokens, vector_dimension, is_default, created_at, updated_at) VALUES
+(1, '本地 llama.cpp', 1, 'http://llama-cpp:8080/v1', '', 'qwen3-4b', 'bge-m3', 8192, 1024, true, NOW(), NOW()),
+(2, 'OpenAI GPT-4o-mini', 2, 'https://api.openai.com/v1', 'sk-your-openai-api-key', 'gpt-4o-mini', 'text-embedding-3-small', 16384, 1536, false, NOW(), NOW());
 
-SELECT setval('embedding_configs_id_seq', (SELECT MAX(id) FROM embedding_configs));
+SELECT setval('llm_configs_id_seq', (SELECT MAX(id) FROM llm_configs));
 
--- ===== 知识库 =====
-INSERT INTO knowledge_bases (id, name, description, rag_workspace_slug, embedding_model, vector_dimension, created_by, created_at, updated_at) VALUES
-(1, 'IT 运维 FAQ', '常见的 IT 运维问题和解决方案', 'opsmind-it-ops', 'bge-m3', 1024, 1, NOW(), NOW());
+-- ===== 知识库（v2: 移除 rag_workspace_slug，新增 llm_config_id）=====
+INSERT INTO knowledge_bases (id, name, description, llm_config_id, embedding_model, vector_dimension, created_by, created_at, updated_at) VALUES
+(1, 'IT 运维 FAQ', '常见的 IT 运维问题和解决方案', 1, 'bge-m3', 1024, 1, NOW(), NOW());
 
 SELECT setval('knowledge_bases_id_seq', (SELECT MAX(id) FROM knowledge_bases));
 
--- ===== 知识文章 =====
-INSERT INTO knowledge_articles (id, kb_id, question, answer, category, tags, status, created_by, created_at, updated_at) VALUES
+-- ===== 知识文章（v2 统一文章模型：title + content + source_type）=====
+INSERT INTO knowledge_articles (id, kb_id, title, content, source_type, category, tags, status, word_count, chunk_count, created_by, created_at, updated_at) VALUES
 (1, 1, '如何重置 VPN 密码？',
  '请登录 VPN 自助服务平台 https://vpn.company.com，点击「忘记密码」按提示操作。如无法自助重置，请联系 IT 服务台（分机 8888）。',
- '网络与VPN', '["VPN","密码","自助"]', 4, 1, NOW(), NOW()),
+ 1, '网络与VPN', '["VPN","密码","自助"]', 4, 68, 2, 1, NOW(), NOW()),
 (2, 1, '电脑无法连接公司 WiFi 怎么办？',
  '请按以下步骤排查：1. 确认 WiFi 开关已打开；2. 忘记该网络后重新连接；3. 重启电脑；4. 如仍无法连接，请提交申告并提供工位信息。',
- '网络与WiFi', '["WiFi","连接","网络"]', 4, 1, NOW(), NOW()),
+ 1, '网络与WiFi', '["WiFi","连接","网络"]', 4, 78, 2, 1, NOW(), NOW()),
 (3, 1, 'Outlook 邮箱无法收发邮件？',
  '请检查：1. 网络连接是否正常；2. Outlook 客户端是否显示「已连接」；3. 尝试网页版邮箱 https://mail.company.com；4. 如网页版正常但客户端异常，请重新配置邮箱账户。',
- '邮箱与办公', '["Outlook","邮箱","邮件"]', 4, 1, NOW(), NOW()),
+ 1, '邮箱与办公', '["Outlook","邮箱","邮件"]', 4, 95, 2, 1, NOW(), NOW()),
 (4, 1, '打印机显示脱机如何处理？',
  '请依次尝试：1. 检查打印机电源和网线；2. 在电脑设备和打印机中右键打印机→查看打印内容→取消所有文档→取消脱机使用打印机；3. 重启打印机。',
- '办公设备', '["打印机","脱机","办公"]', 2, 4, NOW(), NOW()),
+ 1, '办公设备', '["打印机","脱机","办公"]', 2, 73, 0, 4, NOW(), NOW()),
 (5, 1, '新员工入职 IT 设备申请流程？',
  '新员工入职需提前 3 个工作日在 OA 系统提交 IT 设备申请单。标配：ThinkPad T14 + 24寸显示器 + 键鼠套装。',
- '入职与账号', '["入职","设备","新员工"]', 1, 3, NOW(), NOW());
+ 1, '入职与账号', '["入职","设备","新员工"]', 1, 56, 0, 3, NOW(), NOW());
 
 SELECT setval('knowledge_articles_id_seq', (SELECT MAX(id) FROM knowledge_articles));
 
--- ===== 知识切片 =====
-INSERT INTO knowledge_chunks (article_id, content, embedding_model, vector_dimension, sync_status, synced_at, created_at) VALUES
-(1, '如何重置 VPN 密码？请登录 VPN 自助服务平台。', 'bge-m3', 1024, 'synced', NOW(), NOW()),
-(1, '如无法自助重置，请联系 IT 服务台（分机 8888）。', 'bge-m3', 1024, 'synced', NOW(), NOW()),
-(2, '电脑无法连接公司 WiFi 怎么办？请按以下步骤排查。', 'bge-m3', 1024, 'synced', NOW(), NOW()),
-(2, '确认 WiFi 开关已打开，忘记该网络后重新连接，重启电脑。', 'bge-m3', 1024, 'synced', NOW(), NOW()),
-(3, 'Outlook 邮箱无法收发邮件？请检查网络连接和客户端状态。', 'bge-m3', 1024, 'synced', NOW(), NOW());
+-- ===== 知识切片（v2: 移除 sync_* 字段，新增 kb_id + chunk_index）=====
+INSERT INTO knowledge_chunks (article_id, kb_id, content, chunk_index, embedding_model, vector_dimension, created_at) VALUES
+(1, 1, '如何重置 VPN 密码？请登录 VPN 自助服务平台。', 0, 'bge-m3', 1024, NOW()),
+(1, 1, '如无法自助重置，请联系 IT 服务台（分机 8888）。', 1, 'bge-m3', 1024, NOW()),
+(2, 1, '电脑无法连接公司 WiFi 怎么办？请按以下步骤排查。', 0, 'bge-m3', 1024, NOW()),
+(2, 1, '确认 WiFi 开关已打开，忘记该网络后重新连接，重启电脑。', 1, 'bge-m3', 1024, NOW()),
+(3, 1, 'Outlook 邮箱无法收发邮件？请检查网络连接和客户端状态。', 0, 'bge-m3', 1024, NOW());
 
 -- ===== 申告工单 =====
 INSERT INTO tickets (id, ticket_no, user_id, title, description, urgency, impact_scope, contact_phone, contact_email, status, supplement_count, source, created_at, updated_at) VALUES

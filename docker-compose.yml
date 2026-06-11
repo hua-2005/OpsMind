@@ -1,13 +1,14 @@
-# OpsMind — 运维数字员工系统 Docker Compose 编排
+# OpsMind v2 — 运维数字员工系统 Docker Compose 编排
 #
-# 与 ANYTHINGLLM_AI_INTEGRATION.md §3.1 完全对齐。
-# 7 个服务：opsmind-server, opsmind-web, opsmind-setup, anythingllm, vllm, postgres, minio。
+# v2 架构：移除 AnythingLLM + vLLM，自建 Go RAG 引擎 + pgvector 向量存储。
+# 4 个必须服务：opsmind-server, opsmind-web, postgres(pgvector), minio
+# 1 个可选服务：llama-cpp (profile: ai-local)
 #
 # 使用方式：
-#   docker compose up -d --build        # 一键启动全部服务（含自动初始化，不含 vLLM）
-#   docker compose --profile ai-local up -d --build  # 含 vLLM 的完整环境
-#   docker compose down                 # 停止
-#   docker compose down -v              # 停止并清除数据卷
+#   docker compose up -d --build              # 一键启动 4 个必须服务
+#   docker compose --profile ai-local up -d --build  # 含 llama.cpp 完整环境
+#   docker compose down                       # 停止
+#   docker compose down -v                    # 停止并清除数据卷
 
 services:
   # ===== OpsMind Go 后端 =====
@@ -28,23 +29,21 @@ services:
       OPSMIND_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-opsmind_dev}
       OPSMIND_DATABASE_DBNAME: opsmind
       OPSMIND_MINIO_ENDPOINT: minio:9000
-      OPSMIND_ANYTHINGLLM_BASE_URL: ${ANYTHINGLLM_BASE_URL:-http://anythingllm:3001/api}
-      OPSMIND_ANYTHINGLLM_API_KEY: ${ANYTHINGLLM_API_KEY}
-      OPSMIND_JWT_SECRET: ${OPSMIND_JWT_SECRET}
+      OPSMIND_JWT_SECRET: ${JWT_SECRET}
+      # v2: LLM/Embedding 配置（直接调用 llama.cpp 或 OpenAI-compatible API）
+      OPSMIND_LLM_BASE_URL: ${LLM_BASE_URL:-http://llama-cpp:8080/v1}
+      OPSMIND_LLM_API_KEY: ${LLM_API_KEY:-}
+      OPSMIND_LLM_MODEL: ${LLM_MODEL:-qwen3-4b}
+      OPSMIND_LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-8192}
+      OPSMIND_EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+      OPSMIND_EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-1024}
       OPSMIND_AI_DEFAULT_TOP_K: ${AI_DEFAULT_TOP_K:-5}
       OPSMIND_AI_CONFIDENCE_THRESHOLD: ${AI_CONFIDENCE_THRESHOLD:-0.6}
-    # 入口脚本：如果 .env 未配置 API Key，自动从共享卷读取（opsmind-setup 写入）
-    entrypoint: ["/bin/sh", "/entrypoint.sh"]
-    volumes:
-      - ./scripts/opsmind-entrypoint.sh:/entrypoint.sh:ro
-      - opsmind_shared:/shared
     depends_on:
       postgres:
         condition: service_healthy
       minio:
         condition: service_started
-      anythingllm:
-        condition: service_healthy
     networks:
       - opsmind
 
@@ -61,105 +60,9 @@ services:
     networks:
       - opsmind
 
-  # ===== AnythingLLM 自动初始化（仅首次运行）=====
-  # 直接写入 AnythingLLM 的 SQLite 数据库生成 API Key，
-  # 写入共享卷供 opsmind-server 读取，实现纯自动部署。
-  opsmind-setup:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.setup
-    container_name: opsmind-setup
-    restart: "no"
-    volumes:
-      - anythingllm_storage:/storage:rw
-      - opsmind_shared:/shared:rw
-    depends_on:
-      anythingllm:
-        condition: service_healthy
-    networks:
-      - opsmind
-
-  # ===== AnythingLLM RAG 服务 =====
-  anythingllm:
-    image: mintplexlabs/anythingllm:latest
-    container_name: opsmind-anythingllm
-    restart: unless-stopped
-    cap_add:
-      - SYS_ADMIN
-    env_file:
-      - .env
-    environment:
-      SERVER_PORT: 3001
-      STORAGE_DIR: /app/server/storage
-      JWT_SECRET: ${ANYTHINGLLM_JWT_SECRET}
-      SIG_KEY: ${ANYTHINGLLM_SIG_KEY}
-      SIG_SALT: ${ANYTHINGLLM_SIG_SALT}
-      # LLM 提供商：generic-openai 支持所有 OpenAI 兼容 API（OpenAI/vLLM/Ollama/等）
-      LLM_PROVIDER: generic-openai
-      GENERIC_OPEN_AI_BASE_PATH: ${LLM_BASE_URL}
-      GENERIC_OPEN_AI_MODEL_PREF: ${LLM_MODEL}
-      GENERIC_OPEN_AI_MODEL_TOKEN_LIMIT: ${LLM_TOKEN_LIMIT:-8192}
-      GENERIC_OPEN_AI_API_KEY: ${LLM_API_KEY}
-      EMBEDDING_ENGINE: generic-openai
-      EMBEDDING_BASE_PATH: ${EMBEDDING_BASE_URL}
-      EMBEDDING_MODEL_PREF: ${EMBEDDING_MODEL}
-      EMBEDDING_MODEL_MAX_CHUNK_LENGTH: ${EMBEDDING_MAX_CHUNK_LENGTH:-8192}
-      GENERIC_OPEN_AI_EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
-      VECTOR_DB: lancedb
-    volumes:
-      - anythingllm_storage:/app/server/storage
-      - anythingllm_hotdir:/app/collector/hotdir
-      - anythingllm_outputs:/app/collector/outputs
-    # 初始化阶段暴露端口（运行 make setup 自动管理）；
-    # 初始化完成后可注释掉以增强安全性：
-    ports:
-      - "3001:3001"
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3001/api/v1/auth', (r) => { process.exit(0) }).on('error', () => { process.exit(1) })\""]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
-    # depends_on 不包含 vllm，因为 vllm 在 ai-local profile 中是可选的。
-    # 使用 --profile ai-local 时 vllm 才会启动，anythingllm 可在之后重启以连接。
-    networks:
-      - opsmind
-
-  # ===== vLLM 模型推理（可选，通过 --profile ai-local 启用）=====
-  vllm:
-    image: vllm/vllm-openai:latest
-    container_name: opsmind-vllm
-    restart: unless-stopped
-    # 实际部署时按模型和 GPU 环境补充启动参数。
-    # 示例（Qwen3-4B + bge-m3，vLLM 0.8+ 支持多模型）：
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-    # command:
-    #   - "--model"
-    #   - "/models/qwen3-4b"
-    #   - "--model"
-    #   - "/models/bge-m3"
-    #   - "--served-model-name"
-    #   - "qwen3-4b,bge-m3"
-    #   - "--max-model-len"
-    #   - "8192"
-    # 如果 vLLM 版本较旧不支持多模型，可启动两个 vllm 实例分别服务 LLM 和 Embedding。
-    # 或将 EMBEDDING_BASE_URL 改为其他 embedding 服务（如 TEI、Infinity）。
-    volumes:
-      - ./models:/models
-    networks:
-      - opsmind
-    profiles:
-      - ai-local
-
-  # ===== PostgreSQL =====
+  # ===== PostgreSQL + pgvector =====
   postgres:
-    image: postgres:18
+    image: pgvector/pgvector:pg18
     container_name: opsmind-postgres
     restart: unless-stopped
     ports:
@@ -196,14 +99,33 @@ services:
     networks:
       - opsmind
 
+  # ===== llama.cpp Server（可选，profile: ai-local）=====
+  # 使用官方镜像，模型文件通过 volume 挂载。
+  # 模型准备：下载 .gguf 模型文件到 ./models 目录。
+  llama-cpp:
+    image: ghcr.io/ggerganov/llama.cpp:server
+    container_name: opsmind-llama-cpp
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    volumes:
+      - ${LLAMA_MODELS_DIR:-./models}:/models:ro
+    command:
+      - "--model"
+      - "/models/${LLM_MODEL:-qwen3-4b}.gguf"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+    networks:
+      - opsmind
+    profiles:
+      - ai-local
+
 # ===== 数据卷 =====
 volumes:
   postgres_data:
   minio_data:
-  anythingllm_storage:
-  anythingllm_hotdir:
-  anythingllm_outputs:
-  opsmind_shared:
 
 # ===== 网络 =====
 networks:
