@@ -5,6 +5,6 @@
 向量数据库使用pgvector 
 文档解析+ragllm 实现要仿照项目：C:\Users\int2t\Desktop\Projects\Personal\rag-engine 使用go实现
 dockercompose 只要依赖pg(pgvector) minio server web 
-
+llm 定义 llama.cpp 驱动 或者OpenAI-compatible API
 # 约束
 保证模块化 代码简洁 架构严谨

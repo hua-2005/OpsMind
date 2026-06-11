@@ -85,9 +85,9 @@ Authorization: Bearer <token>
 
 | key | 默认值 | 说明 |
 |-----|--------|------|
-| `ai_confidence_threshold` | 0.6 | AI 置信度阈值（低于此值转人工） |
-| `ai_default_top_k` | 5 | RAG 检索 Top K |
 | `app_name` | OpsMind | 应用名称 |
+
+> **v2 变更：** `ai_confidence_threshold` 和 `ai_default_top_k` 移至 [llm-configs API](llm-config.md) 统一管理，不再作为独立系统配置键。LLM 配置热替换生效，无需重启。
 
 ### 更新配置
 
@@ -100,7 +100,7 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "value": "0.7"
+  "value": "OpsMind v2"
 }
 ```
 

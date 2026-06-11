@@ -1,6 +1,6 @@
 # OpsMind API 文档
 
-> 版本：v1.0 | 基础路径：`/api/v1` | 最后更新：2026-06-11
+> 版本：v2.0 | 基础路径：`/api/v1` | 最后更新：2026-06-11
 
 ## 概述
 
@@ -9,8 +9,18 @@ OpsMind 后端提供 RESTful JSON API，分为三组路由：
 | 路由组 | 前缀 | 认证要求 | 说明 |
 |--------|------|----------|------|
 | 公开 | `/api/v1/auth` | 无 | 登录、刷新令牌 |
-| 门户端 | `/api/v1/portal` | JWT | 智能问答、申告提交、进度查询、站内消息 |
-| 后台管理 | `/api/v1/admin` | JWT + RBAC | 申告处理、知识库、用户/角色、看板、审计、配置 |
+| 门户端 | `/api/v1/portal` | JWT | 智能问答（SSE 流式 + RAG 管道）、申告提交、进度查询、站内消息 |
+| 后台管理 | `/api/v1/admin` | JWT + RBAC | 申告处理、知识库管理（含文档上传）、LLM 配置、用户/角色、看板、审计 |
+
+### v2.0 主要变更
+
+| 变更 | 说明 |
+|------|------|
+| 移除 AnythingLLM | RAG 引擎改为 Go 自建（`rag/` 包），向量存储改为 pgvector |
+| 知识模型统一 | `question`/`answer` → `title`/`content`，新增文档上传解析 |
+| SSE 流式升级 | 模拟分块 → 真正的 LLM token 级流式 + 管道步骤事件 |
+| 新增 LLM 配置 | [llm-config.md](llm-config.md) — llama.cpp / OpenAI-compatible 双支持 |
+| Embedding 配置合并 | `embedding-configs` API 移除，合并到 `llm-configs` |
 
 ## 统一响应格式
 
@@ -76,9 +86,10 @@ Authorization: Bearer <access_token>
 | 文档 | 说明 |
 |------|------|
 | [auth.md](auth.md) | 认证接口（登录/刷新/登出/修改密码） |
-| [chat.md](chat.md) | 智能问答接口（普通 + SSE 流式） |
+| [chat.md](chat.md) | 智能问答接口（SSE 流式 + RAG 管道） |
 | [tickets.md](tickets.md) | 申告管理接口（门户提交 + 后台处理） |
-| [knowledge.md](knowledge.md) | 知识库管理接口（KB/文章/审核/发布/Embedding） |
+| [knowledge.md](knowledge.md) | 知识库管理接口（KB/文章/审核/发布/文档上传） |
+| [llm-config.md](llm-config.md) | LLM 配置接口（llama.cpp / OpenAI-compatible） |
 | [users.md](users.md) | 用户管理接口（CRUD + 冻结/恢复） |
 | [roles.md](roles.md) | 角色与菜单管理接口 |
 | [dashboard.md](dashboard.md) | 数据看板接口（统计 + 趋势） |
