@@ -79,7 +79,7 @@ flowchart TB
     end
 
     subgraph Data["数据层 (Docker)"]
-        PG[("PostgreSQL 18<br/>+ pgvector")]
+        PG[("PostgreSQL 18")]
         MinIO[("MinIO S3<br/>✅")]
         AnythingLLM[("AnythingLLM<br/>✅")]
     end

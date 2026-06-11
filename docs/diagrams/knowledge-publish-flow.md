@@ -68,7 +68,7 @@ stateDiagram-v2
         1. RagClient.SyncDocument()
         2. 保存 rag_document_location
         3. 更新 sync_status
-        4. 写入 pgvector chunks
+        4. 记录同步状态到 knowledge_chunks
         ---
         失败时:
         article.status 仍为 4 (已发布)

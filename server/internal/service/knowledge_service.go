@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pgvector/pgvector-go"
-
 	"opsmind/internal/adapter"
 	"opsmind/internal/dto/request"
 	"opsmind/internal/dto/response"
@@ -265,7 +263,6 @@ func (s *KnowledgeService) Publish(id int64, publisherID int64) error {
 			_ = s.repo.CreateChunks([]model.KnowledgeChunk{{
 				ArticleID:       id,
 				Content:         article.Answer,
-				Embedding:       pgvector.NewVector([]float32{0}),
 				EmbeddingModel:  article.KnowledgeBase.EmbeddingModel,
 				VectorDimension: article.KnowledgeBase.VectorDimension,
 				SyncStatus:      "synced",

@@ -159,7 +159,7 @@ services:
 
   # ===== PostgreSQL + pgvector =====
   postgres:
-    image: pgvector/pgvector:pg18
+    image: postgres:18
     container_name: opsmind-postgres
     restart: unless-stopped
     ports:

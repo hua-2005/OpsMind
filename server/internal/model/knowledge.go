@@ -3,7 +3,6 @@ package model
 import (
 	"time"
 
-	"github.com/pgvector/pgvector-go"
 	"gorm.io/datatypes"
 )
 
@@ -43,20 +42,19 @@ type KnowledgeArticle struct {
 
 func (KnowledgeArticle) TableName() string { return "knowledge_articles" }
 
-// KnowledgeChunk 知识切片表
+// KnowledgeChunk 知识切片表。
+// 记录知识条目发布时的切片内容和 AnythingLLM 同步状态。
+// 不再存储 pgvector 向量——RAG 检索由 AnythingLLM LanceDB 承担。
 type KnowledgeChunk struct {
-	ID              int64           `gorm:"primaryKey;autoIncrement" json:"id"`
-	ArticleID       int64           `gorm:"not null;column:article_id;index:idx_chunks_article_id" json:"article_id"`
-	Content         string          `gorm:"type:text;not null" json:"content"`
-	// Embedding 维度由 embedding_configs.vector_dimension 决定，不硬编码在 tag 中。
-	// pgvector 允许无维度约束的 vector 列，应用层按配置生成对应维度的向量。
-	Embedding       pgvector.Vector `gorm:"type:vector" json:"-"`
-	EmbeddingModel  string          `gorm:"type:varchar(128);not null;column:embedding_model" json:"embedding_model"`
-	VectorDimension int             `gorm:"not null;column:vector_dimension" json:"vector_dimension"`
-	SyncStatus      string          `gorm:"type:varchar(16);not null;default:'pending';column:sync_status" json:"sync_status"`
-	SyncError       string          `gorm:"type:text;column:sync_error" json:"sync_error"`
-	SyncedAt        *time.Time      `gorm:"column:synced_at" json:"synced_at"`
-	CreatedAt       time.Time       `gorm:"not null" json:"created_at"`
+	ID              int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	ArticleID       int64      `gorm:"not null;column:article_id;index:idx_chunks_article_id" json:"article_id"`
+	Content         string     `gorm:"type:text;not null" json:"content"`
+	EmbeddingModel  string     `gorm:"type:varchar(128);not null;column:embedding_model" json:"embedding_model"`
+	VectorDimension int        `gorm:"not null;column:vector_dimension" json:"vector_dimension"`
+	SyncStatus      string     `gorm:"type:varchar(16);not null;default:'pending';column:sync_status" json:"sync_status"`
+	SyncError       string     `gorm:"type:text;column:sync_error" json:"sync_error"`
+	SyncedAt        *time.Time `gorm:"column:synced_at" json:"synced_at"`
+	CreatedAt       time.Time  `gorm:"not null" json:"created_at"`
 }
 
 func (KnowledgeChunk) TableName() string { return "knowledge_chunks" }

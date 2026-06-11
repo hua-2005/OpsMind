@@ -1,7 +1,7 @@
-// Package database 负责初始化 PostgreSQL 数据库连接和 pgvector 扩展。
+// Package database 负责初始化 PostgreSQL 数据库连接。
 //
-// 使用 GORM 作为 ORM 框架，通过 gorm.io/driver/postgres 连接 PostgreSQL 18。
-// 初始化时自动启用 pgvector 扩展，为后续知识向量存储做准备。
+// 使用 GORM 作为 ORM 框架，通过 gorm.io/driver/postgres 连接 PostgreSQL。
+// RAG 向量检索由 AnythingLLM LanceDB 承担，不依赖 pgvector。
 package database
 
 import (
@@ -36,11 +36,6 @@ func Init(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	})
 	if err != nil {
 		return nil, fmt.Errorf("连接数据库失败: %w", err)
-	}
-
-	// 启用 pgvector 扩展
-	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS vector").Error; err != nil {
-		return nil, fmt.Errorf("启用 pgvector 扩展失败: %w", err)
 	}
 
 	// 配置连接池

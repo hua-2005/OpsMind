@@ -65,17 +65,14 @@
 │                                                                     │
 │  ┌──────────────────┐    ┌──────────────────┐                      │
 │  │  PostgreSQL 18   │    │  MinIO           │                      │
-│  │  + pgvector      │    │  (对象存储)       │                      │
-│  │  - 业务数据       │    │  - 附件存储       │                      │
-│  │  - 系统侧向量追溯 │    │  - 文档原件       │                      │
+│  │  - 业务数据       │    │  (对象存储)       │                      │
+│  │  - 同步状态记录   │    │  - 附件存储       │                      │
+│  │                   │    │  - 文档原件       │                      │
 │  └──────────────────┘    └──────────────────┘                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-**向量存储边界：**
-- **AnythingLLM LanceDB：** AnythingLLM 内部向量库，负责 RAG 检索。知识发布时由 AnythingLLM 自动完成切分、embedding 和向量写入。
-- **PostgreSQL pgvector：** OpsMind 系统侧向量存储，用于追溯和后续原生检索扩展。知识发布时由 OpsMind 后端按知识库配置的 embedding 模型生成向量并写入。
-- 两者独立，互不依赖。RAG 检索走 AnythingLLM，系统侧查询走 pgvector。
+**向量存储：** 全部由 AnythingLLM 内部 LanceDB 承担——知识发布时由 AnythingLLM 自动完成切分、embedding 和向量写入。PostgreSQL 仅存储业务数据和 AnythingLLM 同步状态，不参与向量检索。
 
 ### 1.2 架构风格
 
@@ -128,8 +125,7 @@ Database / External Adapter
 | 状态管理 | Pinia | 2.1+ | 前端状态管理 |
 | 路由 | Vue Router | 4.3+ | 前端路由 |
 | HTTP 客户端 | Axios | 1.7+ | API 调用 |
-| 数据库 | PostgreSQL | 18 | 业务数据 + 系统侧向量追溯 |
-| 向量扩展 | pgvector | 0.7+ | OpsMind 系统侧知识向量存储 |
+| 数据库 | PostgreSQL | 18 | 业务数据 + AnythingLLM 同步状态 |
 | RAG 服务 | AnythingLLM | latest | Docker 内部组件，负责知识导入、切分、向量检索、RAG 编排（内部向量库: LanceDB） |
 | AI 推理 | vLLM | 0.4+ | Docker 内部组件，通过 AnythingLLM `generic-openai` 提供商接入 |
 | 对象存储 | MinIO | latest | 附件和文档存储 |
@@ -157,22 +153,23 @@ Database / External Adapter
 - 负面：模块间耦合度较高，后续拆分需要重构。
 - 后续扩展：模块边界按 Go package 划分，如需拆分可独立为服务。
 
-#### ADR-002: PostgreSQL + pgvector vs 专用向量数据库
+#### ADR-002: RAG 向量检索由 AnythingLLM LanceDB 承担
 
 **状态：** 已接受
 
-**背景：** 知识库需要存储和检索向量，需要选择向量存储方案。
+**背景：** 智能问答需要向量检索能力，需要选择向量存储方案。
 
-**决策：** 使用 PostgreSQL 18 + pgvector 扩展。
+**决策：** RAG 向量检索全部由 AnythingLLM 内置 LanceDB 承担，PostgreSQL 只存业务数据和同步状态，不引入独立的向量数据库。
 
 **备选方案：**
 - **Milvus/Qdrant：** 专用向量数据库，检索性能更高。优势是专业；劣势是额外部署一个服务、增加运维成本。
-- **Elasticsearch + knn：** 全文检索 + 向量检索。优势是功能全面；劣势是资源消耗大（4C8GB 环境吃不消）。
+- **pgvector：** PostgreSQL 向量扩展。优势是单数据库；劣势是需要应用层自行处理 embedding 生成和向量索引维护。
+- **Elasticsearch + knn：** 全文检索 + 向量检索。优势是功能全面；劣势是资源消耗大。
 
 **后果：**
-- 正面：单一数据库、无额外服务、事务一致性。
-- 负面：向量检索性能不如专用数据库（MVP 数据量可接受）。
-- 约束：AnythingLLM 负责主要 RAG 检索，pgvector 仅用于系统侧向量存储和追溯。
+- 正面：零额外向量基础设施，AnythingLLM 全权负责 RAG 流程（切分→embedding→索引→检索），运维简单。
+- 负面：无法直接通过 SQL 查询向量相似度（应用层不需要此能力）。
+- 约束：知识同步状态（synced/failed/disabled）记录在 PostgreSQL knowledge_chunks 表中，用于运维监控。
 
 #### ADR-003: AnythingLLM 作为内部 Docker 组件集成
 
@@ -621,8 +618,8 @@ action=supplement 时：{"supplement_content": "补充的内容"}
 | name | varchar(128) | NOT NULL | 知识库名称 |
 | description | text | | 知识库描述 |
 | rag_workspace_slug | varchar(128) | UNIQUE | AnythingLLM workspace slug（创建知识库时由后端调用 AnythingLLM `/workspace/new` 生成） |
-| embedding_model | varchar(128) | NOT NULL | embedding 模型名称（用于 pgvector 侧向量生成） |
-| vector_dimension | integer | NOT NULL | 向量维度（用于 pgvector 侧向量生成） |
+| embedding_model | varchar(128) | NOT NULL | 使用的 embedding 模型名称 |
+| vector_dimension | integer | NOT NULL | 向量维度（记录用，与 AnythingLLM 配置一致） |
 | created_by | bigint | FK → users.id | 创建人 |
 | created_at | timestamptz | NOT NULL | 创建时间 |
 | updated_at | timestamptz | NOT NULL | 更新时间 |
@@ -693,12 +690,9 @@ CREATE INDEX idx_articles_kb_id ON knowledge_articles(kb_id);
 CREATE INDEX idx_articles_status ON knowledge_articles(status);
 CREATE INDEX idx_articles_created_by ON knowledge_articles(created_by);
 
--- knowledge_chunks
+-- knowledge_chunks（记录 AnythingLLM 同步状态，不含向量存储）
 CREATE INDEX idx_chunks_article_id ON knowledge_chunks(article_id);
 CREATE INDEX idx_chunks_sync_status ON knowledge_chunks(sync_status);
--- pgvector HNSW 索引（按知识库配置的维度创建）
--- CREATE INDEX idx_chunks_embedding ON knowledge_chunks
---   USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
 -- chat_sessions
 CREATE INDEX idx_chat_user_id ON chat_sessions(user_id);
@@ -1204,7 +1198,7 @@ type StorageClient interface {
 | opsmind-web | 自构建 | 5173 | Vue 前端 |
 | anythingllm | mintplexlabs/anythingllm:latest | 内部 3001（默认不暴露） | RAG 服务，Docker 内部组件 |
 | vllm | vllm/vllm-openai:latest | 内部 8000 | 模型推理，通过 `ai-local` profile 启用 |
-| postgres | pgvector/pgvector:pg18 | 5432 | 业务数据库 |
+| postgres | postgres:18 | 5432 | 业务数据库 |
 | minio | minio/minio:latest | 9000/9001 | 对象存储 |
 
 **关键约束：**
@@ -1339,8 +1333,7 @@ OpsMind 后端调用 AnythingLLM: POST /api/v1/workspace/{slug}/chat
   │
   ├─→ 失败 → sync_status = 'failed', 记录 sync_error
   │
-  └─→ 同时 → 生成向量写入 pgvector（系统侧追溯）
-        ├─→ 成功 → pgvector 写入完成
+  └─→ 同时 → 记录切片同步状态到 knowledge_chunks
         └─→ 失败 → 记录日志（不影响 AnythingLLM 同步状态）
 ```
 

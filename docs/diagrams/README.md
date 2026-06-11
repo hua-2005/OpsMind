@@ -22,7 +22,7 @@
 | [chat-rag-flow.md](chat-rag-flow.md) | `chat_service.go`, `adapter/rag_client.go` | 完整 RAG 链路：AnythingLLM 检索 → vLLM 生成 → 置信度判断 → 降级兜底 + 反馈 |
 | [ticket-lifecycle.md](ticket-lifecycle.md) | `ticket_service.go`, `scheduler.go`, `message_service.go` | 申告完整生命周期：创建 → 状态机 5 态转换 → 补充信息循环 → 7 天自动关闭 → 站内消息 |
 | [ticket-state-machine.md](ticket-state-machine.md) | `ticket_service.go` | 申告状态机（聚焦参考）— 状态转换规则与守卫条件 |
-| [knowledge-publish-flow.md](knowledge-publish-flow.md) | `knowledge_service.go`, `adapter/rag_client.go` | 知识库创建 → 审核状态机 → AnythingLLM 同步 → pgvector 写入 → 停用/重试 |
+| [knowledge-publish-flow.md](knowledge-publish-flow.md) | `knowledge_service.go`, `adapter/rag_client.go` | 知识库创建 → 审核状态机 → AnythingLLM 同步 → 停用/重试 |
 | [user-rbac-flow.md](user-rbac-flow.md) | `user_service.go`, `role_service.go`, `auth_service.go` | 用户 CRUD + 角色权限 + ER 数据模型 + buildLoginResponse 完整链路 |
 | [dashboard-audit-flow.md](dashboard-audit-flow.md) | `dashboard_service.go`, `audit_repo.go`, `config_service.go` | 看板 7 项统计 SQL + 趋势数据 + 审计日志分散写入 + 系统配置 Upsert |
 

@@ -4,7 +4,7 @@
 
 你是一名 **Go + Vue 3 全栈开发者**，精通以下技术栈：
 
-- **后端：** Go 1.22+ / Gin 1.9+ / GORM v1.25+ / PostgreSQL 18 / pgvector 0.7+
+- **后端：** Go 1.22+ / Gin 1.9+ / GORM v1.25+ / PostgreSQL 18
 - **前端：** Vue 3.4+ / TypeScript / Radix Vue 1.9+ / Pinia 2.1+ / Vue Router 4.3+ / Axios 1.7+
 - **AI/RAG：** AnythingLLM（Docker 内部组件）/ vLLM（通过 AnythingLLM generic-openai 接入）
 - **存储：** MinIO（S3-compatible 对象存储）
@@ -43,10 +43,7 @@
 
 **架构风格：** 单体分层架构（Modular Monolith），Handler → Service → Repository 三层分离。
 
-**向量存储边界：**
-- AnythingLLM LanceDB = RAG 检索（知识发布时由 AnythingLLM 自动完成切分、embedding、向量写入）
-- PostgreSQL pgvector = OpsMind 系统侧向量追溯（知识发布时由 OpsMind 后端按 embedding 配置生成向量写入）
-- 两者独立，互不依赖
+**向量存储：** 全部由 AnythingLLM LanceDB 承担——知识发布时由 AnythingLLM 自动完成切分、embedding、向量写入。PostgreSQL 仅存储业务数据和 AnythingLLM 同步状态。
 
 **vLLM 调用路径：** OpsMind 后端 → AnythingLLM → vLLM（通过 generic-openai 提供商），OpsMind 不直接调用 vLLM。
 
@@ -182,7 +179,7 @@ make seed
 | `web/src/stores/` | Pinia 状态管理（auth / chat / app） |
 | `web/src/router/` | Vue Router 路由定义和守卫 |
 | `web/src/styles/` | 全局样式（Linear Design 暗色主题 CSS 变量） |
-| `docker-compose.yml` | Docker Compose 编排（7 服务：opsmind-server/web/setup + anythingllm + vllm + postgres + minio） |
+| `docker-compose.yml` | Docker Compose 编排（7 服务：opsmind-server/web/setup + anythingllm + vllm + postgres + minio，使用 postgres:18 镜像） |
 | `.env` | 环境变量（已 gitignore） |
 | `.env.example` | 环境变量模板（提交到版本库） |
 | `Makefile` | 构建和开发命令（T37 实现） |
@@ -293,7 +290,6 @@ func HashPassword(password string) (string, error) {
 | --- | --- |
 | Gin | https://gin-gonic.com/docs/ |
 | GORM | https://gorm.io/docs/ |
-| pgvector-go | https://github.com/pgvector/pgvector-go |
 | golang-jwt | https://github.com/golang-jwt/jwt |
 | MinIO Go SDK | https://min.io/docs/minio/linux/developers/go/API.html |
 | Vue 3 | https://vuejs.org/guide/ |

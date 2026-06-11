@@ -13,8 +13,6 @@ import (
 	_ "github.com/golang-jwt/jwt/v5"
 	// MinIO 对象存储客户端
 	_ "github.com/minio/minio-go/v7"
-	// pgvector 向量类型支持
-	_ "github.com/pgvector/pgvector-go"
 	// Viper 多环境配置管理
 	_ "github.com/spf13/viper"
 	// GORM ORM 框架
