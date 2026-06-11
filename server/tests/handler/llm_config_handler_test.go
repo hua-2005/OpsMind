@@ -2,12 +2,14 @@ package handler_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"opsmind/internal/adapter"
 	"opsmind/internal/handler"
 	"opsmind/internal/model"
 	"opsmind/internal/service"
@@ -55,6 +57,8 @@ func setupLLMTestRouter(svc *mockLLMConfigSvc) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h := handler.NewLLMConfigHandler(svc)
+	// 注入 mock LLMClient（TestConnection 需要）
+	h.SetLLMClient(&mockTestLLMClient{response: &adapter.ChatResponse{Content: "ok", FinishReason: "stop"}})
 	r.GET("/api/v1/admin/llm-configs", h.ListConfigs)
 	r.POST("/api/v1/admin/llm-configs", h.CreateConfig)
 	r.GET("/api/v1/admin/llm-configs/:id", h.GetConfig)
@@ -153,12 +157,11 @@ func TestLLMConfigHandler_DeleteConfig(t *testing.T) {
 
 // TestLLMConfigHandler_TestConnection 验证 POST /llm-configs/:id/test。
 func TestLLMConfigHandler_TestConnection(t *testing.T) {
-	// mock 返回有效配置
 	called := false
 	svc := &mockLLMConfigSvc{}
 	svc.getConfigFn = func(id int64) (*model.LlmConfig, error) {
 		called = true
-		return &model.LlmConfig{ID: 1, Name: "test", BaseURL: "http://x:8080/v1"}, nil
+		return &model.LlmConfig{ID: 1, Name: "test", LLMModel: "qwen3-4b", BaseURL: "http://x:8080/v1"}, nil
 	}
 
 	r := setupLLMTestRouter(svc)
@@ -172,4 +175,17 @@ func TestLLMConfigHandler_TestConnection(t *testing.T) {
 	if !called {
 		t.Error("应调用 GetConfig 获取配置信息")
 	}
+}
+
+// mockTestLLMClient 模拟 LLMClient 用于测试连接。
+type mockTestLLMClient struct {
+	response *adapter.ChatResponse
+	err      error
+}
+
+func (m *mockTestLLMClient) ChatCompletion(ctx context.Context, req adapter.ChatRequest) (*adapter.ChatResponse, error) {
+	return m.response, m.err
+}
+func (m *mockTestLLMClient) ChatCompletionStream(ctx context.Context, req adapter.ChatRequest) (<-chan adapter.StreamChunk, error) {
+	return nil, fmt.Errorf("not impl")
 }

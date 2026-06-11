@@ -30,12 +30,18 @@ import (
 
 // ChatHandler 智能问答接口。
 type ChatHandler struct {
-	svc *service.ChatService
+	svc       *service.ChatService
+	llmClient adapter.LLMClient // v2: 真实 token 级流式（nil 时降级到模拟流式）
 }
 
 // NewChatHandler 创建 ChatHandler 实例。
 func NewChatHandler(svc *service.ChatService) *ChatHandler {
 	return &ChatHandler{svc: svc}
+}
+
+// SetLLMClient 注入 LLM 客户端（启用真正的 token 级流式输出）。
+func (h *ChatHandler) SetLLMClient(client adapter.LLMClient) {
+	h.llmClient = client
 }
 
 // =============================================================================
@@ -162,43 +168,16 @@ func (h *ChatHandler) StreamChatSession(c *gin.Context) {
 		return
 	}
 
-	// 将答案文本按 rune 分块流式发送
-	// 为什么每次 5 个 rune 而非按词分割：
-	// 中文无空格分隔，按 rune 分块可以通用处理中英文混合场景
-	// 30ms 间隔模拟人类阅读节奏，减少闪烁感
-	answer := resp.Answer
-	runes := []rune(answer)
-	chunkSize := 5
-	for i := 0; i < len(runes); i += chunkSize {
-		// 检测客户端断开连接
-		select {
-		case <-c.Request.Context().Done():
-			return
-		default:
-		}
-
-		end := i + chunkSize
-		if end > len(runes) {
-			end = len(runes)
-		}
-		chunk := string(runes[i:end])
-
-		// 对 JSON 字符串中的特殊字符做转义
-		escaped := strings.ReplaceAll(chunk, `\`, `\\`)
-		escaped = strings.ReplaceAll(escaped, `"`, `\"`)
-		escaped = strings.ReplaceAll(escaped, "\n", `\n`)
-		escaped = strings.ReplaceAll(escaped, "\r", `\r`)
-
-		fmt.Fprintf(c.Writer, "data: {\"type\":\"token\",\"content\":\"%s\"}\n\n", escaped)
-		flusher.Flush()
-
-		// 模拟流式阅读节奏，30ms 间隔近似人类逐句阅读速度
-		time.Sleep(30 * time.Millisecond)
+	// v2 升级：LLMClient 可用时使用真正的 token 级流式，不可用时降级到模拟流式
+	if h.llmClient != nil {
+		h.streamWithLLM(c, flusher, resp.Answer, req)
+	} else {
+		h.streamSimulated(c, flusher, resp.Answer)
 	}
 
 	// 发送完成事件（含完整元数据）
-	metadataJSON, err := json.Marshal(resp)
-	if err != nil {
+	metadataJSON, merr := json.Marshal(resp)
+	if merr != nil {
 		fmt.Fprintf(c.Writer, "data: {\"type\":\"done\",\"session_id\":%d}\n\n", resp.SessionID)
 	} else {
 		fmt.Fprintf(c.Writer, "data: {\"type\":\"done\",\"metadata\":%s}\n\n", string(metadataJSON))
@@ -206,110 +185,57 @@ func (h *ChatHandler) StreamChatSession(c *gin.Context) {
 	flusher.Flush()
 }
 
-// =============================================================================
-// SSE v2 — 真正 token 级流式输出
-// =============================================================================
+// streamWithLLM 使用 LLMClient.ChatCompletionStream 实现真正的 token 级流式。
+func (h *ChatHandler) streamWithLLM(c *gin.Context, flusher http.Flusher, fallbackAnswer string, req request.CreateChatRequest) {
+	ctx := c.Request.Context()
+	streamReq := adapter.ChatRequest{
+		Messages: []adapter.ChatMessage{
+			{Role: "user", Content: req.Question},
+		},
+		MaxTokens:   2048,
+		Temperature: 0.3,
+	}
 
-// StreamChatSessionV2 使用 LLMClient 真正的 token 级流式输出。
-//
-// POST /api/v1/portal/chat-sessions/stream
-//
-// v1→v2 变更：
-//  - 移除旧的「每次 5 个 rune + 30ms 间隔」模拟分块逻辑
-//  - 使用 LLMClient.ChatCompletionStream 获取真实 token channel
-//  - 逐 token 发送 SSE 事件
-//  - 发送管道步骤事件（step events）
-//
-// 此方法需要注入 LLMClient（从 main.go 传入），
-// 当 llmClient 为 nil 时降级到 v1 模拟流式。
-func (h *ChatHandler) StreamChatSessionV2(llmClient adapter.LLMClient) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var req request.CreateChatRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			response.Error(c, errcode.ErrParam, "参数校验失败: "+err.Error())
+	tokenCh, err := h.llmClient.ChatCompletionStream(ctx, streamReq)
+	if err != nil {
+		h.streamSimulated(c, flusher, fallbackAnswer)
+		return
+	}
+
+	for chunk := range tokenCh {
+		select {
+		case <-ctx.Done():
 			return
+		default:
 		}
-
-		userID := getCurrentUserID(c)
-
-		// v1 降级：lLMClient 不可用时使用旧方法
-		if llmClient == nil {
-			h.StreamChatSession(c)
-			return
+		if chunk.Error != nil || chunk.Content == "" {
+			continue
 		}
-
-		// 设置 SSE 响应头
-		c.Header("Content-Type", "text/event-stream")
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Connection", "keep-alive")
-		c.Header("X-Accel-Buffering", "no")
-		c.Status(http.StatusOK)
-
-		flusher, ok := c.Writer.(http.Flusher)
-		if !ok {
-			response.Success(c, gin.H{"error": "SSE 不支持"})
-			return
-		}
-
-		// 调用 v1 获取基础问答，再通过 LLMClient 流式输出
-		// 注意：完整 Pipeline 集成在 M6 前端接入时完善
-		resp, err := h.svc.CreateChatSession(req, userID)
-		if err != nil {
-			handleServiceError(c, err)
-			return
-		}
-
-		// 使用 LLMClient 流式输出答案
-		ctx := c.Request.Context()
-		streamReq := adapter.ChatRequest{
-			Messages: []adapter.ChatMessage{
-				{Role: "user", Content: req.Question},
-			},
-			MaxTokens:   2048,
-			Temperature: 0.3,
-		}
-
-		tokenCh, err := llmClient.ChatCompletionStream(ctx, streamReq)
-		if err != nil {
-			// 降级：逐词模拟流式
-			h.writeAnswerAsTokens(c.Writer, flusher, resp.Answer)
-		} else {
-			for chunk := range tokenCh {
-				if chunk.Error != nil {
-					continue
-				}
-				if chunk.Content != "" {
-					escaped := escapeSSE(chunk.Content)
-					fmt.Fprintf(c.Writer, "data: {\"type\":\"token\",\"content\":\"%s\"}\n\n", escaped)
-					flusher.Flush()
-				}
-				if chunk.FinishReason != "" {
-					break
-				}
-			}
-		}
-
-		// 发送完成事件
-		metadataJSON, _ := json.Marshal(resp)
-		fmt.Fprintf(c.Writer, "data: {\"type\":\"done\",\"metadata\":%s}\n\n", string(metadataJSON))
+		fmt.Fprintf(c.Writer, "data: {\"type\":\"token\",\"content\":\"%s\"}\n\n", escapeSSE(chunk.Content))
 		flusher.Flush()
+		if chunk.FinishReason != "" {
+			break
+		}
 	}
 }
 
-// writeAnswerAsTokens 将完整答案按 rune 分块流式发送（降级方案）。
-func (h *ChatHandler) writeAnswerAsTokens(w http.ResponseWriter, flusher http.Flusher, answer string) {
+// streamSimulated 降级方案：将完整答案按 rune 分块模拟流式输出。
+func (h *ChatHandler) streamSimulated(c *gin.Context, flusher http.Flusher, answer string) {
 	runes := []rune(answer)
 	chunkSize := 5
 	for i := 0; i < len(runes); i += chunkSize {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		default:
+		}
 		end := i + chunkSize
 		if end > len(runes) {
 			end = len(runes)
 		}
-		chunk := string(runes[i:end])
-		escaped := escapeSSE(chunk)
-		fmt.Fprintf(w, "data: {\"type\":\"token\",\"content\":\"%s\"}\n\n", escaped)
+		fmt.Fprintf(c.Writer, "data: {\"type\":\"token\",\"content\":\"%s\"}\n\n", escapeSSE(string(runes[i:end])))
 		flusher.Flush()
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(30 * time.Millisecond)
 	}
 }
 

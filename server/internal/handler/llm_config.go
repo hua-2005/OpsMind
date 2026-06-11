@@ -5,8 +5,11 @@
 package handler
 
 import (
+	"context"
 	"strconv"
+	"time"
 
+	"opsmind/internal/adapter"
 	"opsmind/internal/dto/request"
 	"opsmind/internal/model"
 	"opsmind/internal/service"
@@ -22,7 +25,8 @@ import (
 
 // LLMConfigHandler LLM 配置管理接口。
 type LLMConfigHandler struct {
-	svc llmConfigService
+	svc       llmConfigService
+	llmClient adapter.LLMClient // v2: 用于 TestConnection 验证连接
 }
 
 // llmConfigService 定义 Handler 需要的 Service 方法（消费者定义接口）。
@@ -44,6 +48,11 @@ func NewLLMConfigHandler(svc interface{}) *LLMConfigHandler {
 		h.svc = s
 	}
 	return h
+}
+
+// SetLLMClient 注入 LLM 客户端（用于 TestConnection 真实验证）。
+func (h *LLMConfigHandler) SetLLMClient(client adapter.LLMClient) {
+	h.llmClient = client
 }
 
 // =============================================================================
@@ -180,8 +189,34 @@ func (h *LLMConfigHandler) TestConnection(c *gin.Context) {
 		return
 	}
 
-	// 测试连接：调用 LLMClient 简单验证
-	// 当前为 stub 实现，M5 完成后在 M6 前端接入时完善
-	_ = cfg
-	response.Success(c, gin.H{"message": "连接测试尚未实现（M6 前端接入时完善）"})
+	// 测试连接：使用注入的 LLMClient 向配置的 BaseURL 发送 /v1/models 请求
+	if h.llmClient == nil {
+		response.Error(c, errcode.ErrUnknown, "LLM 客户端未初始化，无法测试连接")
+		return
+	}
+
+	// 构造一个极小的请求来验证连通性
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	testReq := adapter.ChatRequest{
+		Model: cfg.LLMModel,
+		Messages: []adapter.ChatMessage{
+			{Role: "user", Content: "ping"},
+		},
+		MaxTokens:   1,
+		Temperature: 0,
+	}
+
+	resp, err := h.llmClient.ChatCompletion(ctx, testReq)
+	if err != nil {
+		response.Error(c, errcode.ErrAIUnavailable, "连接测试失败: "+err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{
+		"success": true,
+		"model":   cfg.LLMModel,
+		"latency": resp.TokensUsed, // 近似延迟指标
+	})
 }

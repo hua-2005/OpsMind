@@ -136,11 +136,13 @@ func main() {
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeService)
 	knowledgeHandler.SetV2Service(knowledgeServiceV2) // v2: 文档上传/发布管道
 	chatHandler := handler.NewChatHandler(chatService)
+	chatHandler.SetLLMClient(llmClient) // v2: 真实 token 级流式
 	messageHandler := handler.NewMessageHandler(messageService)
 	dashboardHandler := handler.NewDashboardHandler(dashboardService)
 	auditHandler := handler.NewAuditHandler(auditRepo, db)
 	configHandler := handler.NewConfigHandler(configService)
 	llmConfigHandler := handler.NewLLMConfigHandler(llmConfigSvc)
+	llmConfigHandler.SetLLMClient(llmClient) // v2: TestConnection 真实验证
 
 	// 8. 初始化后台调度器
 	scheduler := service.NewScheduler(ticketRepo)
