@@ -37,8 +37,6 @@ func TestLoad_DefaultValues(t *testing.T) {
 		t.Errorf("Database.User = %q, 期望 opsmind", cfg.Database.User)
 	}
 
-	// 密码通过环境变量设置，config.yaml 中默认为空
-
 	if cfg.Database.DBName != "opsmind" {
 		t.Errorf("Database.DBName = %q, 期望 opsmind", cfg.Database.DBName)
 	}
@@ -63,8 +61,23 @@ func TestLoad_DefaultValues(t *testing.T) {
 		t.Error("MinIO.UseSSL = true, 期望 false")
 	}
 
-	if cfg.AnythingLLM.BaseURL != "http://anythingllm:3001/api" {
-		t.Errorf("AnythingLLM.BaseURL = %q, 期望 http://anythingllm:3001/api", cfg.AnythingLLM.BaseURL)
+	// v2: LLM 配置替代 v1 AnythingLLM 配置
+	if cfg.LLM.BaseURL != "http://llama-cpp:8080/v1" {
+		t.Errorf("LLM.BaseURL = %q, 期望 http://llama-cpp:8080/v1", cfg.LLM.BaseURL)
+	}
+	if cfg.LLM.Model != "qwen3-4b" {
+		t.Errorf("LLM.Model = %q, 期望 qwen3-4b", cfg.LLM.Model)
+	}
+	if cfg.LLM.MaxTokens != 8192 {
+		t.Errorf("LLM.MaxTokens = %d, 期望 8192", cfg.LLM.MaxTokens)
+	}
+
+	// v2: Embedding 配置（与 LLM 共用 BaseURL，但独立模型名和维度）
+	if cfg.Embedding.Model != "bge-m3" {
+		t.Errorf("Embedding.Model = %q, 期望 bge-m3", cfg.Embedding.Model)
+	}
+	if cfg.Embedding.Dimension != 1024 {
+		t.Errorf("Embedding.Dimension = %d, 期望 1024", cfg.Embedding.Dimension)
 	}
 
 	if cfg.AI.ConfidenceThreshold != 0.6 {
@@ -82,7 +95,9 @@ func TestLoad_EnvOverride(t *testing.T) {
 	t.Setenv("OPSMIND_SERVER_PORT", "9090")
 	t.Setenv("OPSMIND_DATABASE_HOST", "remote-host")
 	t.Setenv("OPSMIND_DATABASE_PORT", "5433")
-	t.Setenv("OPSMIND_ANYTHINGLLM_API_KEY", "test-api-key")
+	t.Setenv("OPSMIND_LLM_API_KEY", "env-api-key-override")
+	t.Setenv("OPSMIND_LLM_BASE_URL", "https://api.deepseek.com/v1")
+	t.Setenv("OPSMIND_EMBEDDING_MODEL", "text-embedding-3-large")
 	t.Setenv("OPSMIND_JWT_SECRET", "test-jwt-secret-32chars-long!!!!!")
 
 	cfgPath := filepath.Join("..", "..", "internal", "config", "config.yaml")
@@ -103,8 +118,17 @@ func TestLoad_EnvOverride(t *testing.T) {
 		t.Errorf("Database.Port = %d, 期望 5433（环境变量覆盖）", cfg.Database.Port)
 	}
 
-	if cfg.AnythingLLM.APIKey != "test-api-key" {
-		t.Errorf("AnythingLLM.APIKey = %q, 期望 test-api-key（环境变量覆盖）", cfg.AnythingLLM.APIKey)
+	// 验证 LLM 配置被环境变量覆盖
+	if cfg.LLM.APIKey != "env-api-key-override" {
+		t.Errorf("LLM.APIKey = %q, 期望 env-api-key-override（环境变量覆盖）", cfg.LLM.APIKey)
+	}
+	if cfg.LLM.BaseURL != "https://api.deepseek.com/v1" {
+		t.Errorf("LLM.BaseURL = %q, 期望 https://api.deepseek.com/v1（环境变量覆盖）", cfg.LLM.BaseURL)
+	}
+
+	// 验证 Embedding 配置被环境变量覆盖
+	if cfg.Embedding.Model != "text-embedding-3-large" {
+		t.Errorf("Embedding.Model = %q, 期望 text-embedding-3-large（环境变量覆盖）", cfg.Embedding.Model)
 	}
 
 	if cfg.JWT.Secret != "test-jwt-secret-32chars-long!!!!!" {
@@ -156,9 +180,23 @@ func TestLoad_StructFields(t *testing.T) {
 		t.Error("MinIO.SecretKey 未填充")
 	}
 
-	// 验证 AnythingLLM 结构体
-	if cfg.AnythingLLM.BaseURL == "" {
-		t.Error("AnythingLLM.BaseURL 未填充")
+	// v2: 验证 LLM 结构体
+	if cfg.LLM.BaseURL == "" {
+		t.Error("LLM.BaseURL 未填充")
+	}
+	if cfg.LLM.Model == "" {
+		t.Error("LLM.Model 未填充")
+	}
+	if cfg.LLM.MaxTokens == 0 {
+		t.Error("LLM.MaxTokens 未填充")
+	}
+
+	// v2: 验证 Embedding 结构体
+	if cfg.Embedding.Model == "" {
+		t.Error("Embedding.Model 未填充")
+	}
+	if cfg.Embedding.Dimension == 0 {
+		t.Error("Embedding.Dimension 未填充")
 	}
 
 	// 验证 AI 结构体
@@ -168,4 +206,28 @@ func TestLoad_StructFields(t *testing.T) {
 	if cfg.AI.DefaultTopK == 0 {
 		t.Error("AI.DefaultTopK 未填充")
 	}
+}
+
+// TestLoad_LLMConfigHotReload 验证 LLM 配置支持热替换所需的字段完整性。
+//
+// config 包使用 atomic.Value 存储当前 LLMConfig，
+// 要求 LLMConfig 包含所有调用 LLMClient 所需的字段（BaseURL/APIKey/Model/MaxTokens）。
+func TestLoad_LLMConfigHotReload(t *testing.T) {
+	cfgPath := filepath.Join("..", "..", "internal", "config", "config.yaml")
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() 失败: %v", err)
+	}
+
+	// LLM 热替换关键字段：BaseURL、APIKey、Model、MaxTokens 缺一不可
+	if cfg.LLM.BaseURL == "" {
+		t.Error("LLM.BaseURL 为空 — 热替换 LLM 客户端需要 BaseURL")
+	}
+	if cfg.LLM.Model == "" {
+		t.Error("LLM.Model 为空 — 热替换需要知道模型名称")
+	}
+	if cfg.LLM.MaxTokens <= 0 {
+		t.Errorf("LLM.MaxTokens = %d, 期望 > 0", cfg.LLM.MaxTokens)
+	}
+	// APIKey 可以为空（llama.cpp 不需要），但字段必须存在
 }

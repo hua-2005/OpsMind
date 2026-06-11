@@ -14,12 +14,13 @@ import (
 
 // AppConfig 是顶层配置结构体，包含所有子模块配置。
 type AppConfig struct {
-	Server       ServerConfig       `mapstructure:"server"`
-	Database     DatabaseConfig     `mapstructure:"database"`
-	JWT          JWTConfig          `mapstructure:"jwt"`
-	MinIO        MinIOConfig        `mapstructure:"minio"`
-	AnythingLLM  AnythingLLMConfig  `mapstructure:"anythingllm"`
-	AI           AIConfig           `mapstructure:"ai"`
+	Server    ServerConfig    `mapstructure:"server"`
+	Database  DatabaseConfig  `mapstructure:"database"`
+	JWT       JWTConfig       `mapstructure:"jwt"`
+	MinIO     MinIOConfig     `mapstructure:"minio"`
+	LLM       LLMConfig       `mapstructure:"llm"`
+	Embedding EmbeddingConfig `mapstructure:"embedding"`
+	AI        AIConfig        `mapstructure:"ai"`
 }
 
 // ServerConfig 是 HTTP 服务器配置。
@@ -53,15 +54,25 @@ type MinIOConfig struct {
 	UseSSL    bool   `mapstructure:"use_ssl"`
 }
 
-// AnythingLLMConfig 是 AnythingLLM RAG 服务配置。
+// LLMConfig 是大语言模型调用配置。
 //
-// BaseURL 固定使用 Docker 内部地址 http://anythingllm:3001/api，
-// 只有本机调试时才改为 http://localhost:3001/api。
-type AnythingLLMConfig struct {
-	BaseURL              string `mapstructure:"base_url"`
-	APIKey               string `mapstructure:"api_key"`
-	DefaultWorkspaceSlug string `mapstructure:"default_workspace_slug"`
-	TimeoutSeconds       int    `mapstructure:"timeout_seconds"`
+// 支持任意 OpenAI-compatible API（llama.cpp / OpenAI / DeepSeek 等）。
+// BaseURL 指向 /v1 根路径（如 http://llama-cpp:8080/v1），
+// APIKey 对 llama.cpp 本地部署可为空。
+type LLMConfig struct {
+	BaseURL   string `mapstructure:"base_url"`
+	APIKey    string `mapstructure:"api_key"`
+	Model     string `mapstructure:"model"`
+	MaxTokens int    `mapstructure:"max_tokens"`
+}
+
+// EmbeddingConfig 是文本向量化配置。
+//
+// 与 LLM 共用 BaseURL（同一服务商），但模型名称和向量维度独立配置。
+// 支持任意 OpenAI-compatible /v1/embeddings 端点。
+type EmbeddingConfig struct {
+	Model     string `mapstructure:"model"`
+	Dimension int    `mapstructure:"dimension"`
 }
 
 // AIConfig 是 AI 问答相关配置。
@@ -141,11 +152,15 @@ func bindEnvs(v *viper.Viper) {
 	v.BindEnv("minio.secret_key", "OPSMIND_MINIO_SECRET_KEY")
 	v.BindEnv("minio.use_ssl", "OPSMIND_MINIO_USE_SSL")
 
-	// AnythingLLM
-	v.BindEnv("anythingllm.base_url", "OPSMIND_ANYTHINGLLM_BASE_URL")
-	v.BindEnv("anythingllm.api_key", "OPSMIND_ANYTHINGLLM_API_KEY")
-	v.BindEnv("anythingllm.default_workspace_slug", "OPSMIND_ANYTHINGLLM_DEFAULT_WORKSPACE_SLUG")
-	v.BindEnv("anythingllm.timeout_seconds", "OPSMIND_ANYTHINGLLM_TIMEOUT_SECONDS")
+	// LLM
+	v.BindEnv("llm.base_url", "OPSMIND_LLM_BASE_URL")
+	v.BindEnv("llm.api_key", "OPSMIND_LLM_API_KEY")
+	v.BindEnv("llm.model", "OPSMIND_LLM_MODEL")
+	v.BindEnv("llm.max_tokens", "OPSMIND_LLM_MAX_TOKENS")
+
+	// Embedding
+	v.BindEnv("embedding.model", "OPSMIND_EMBEDDING_MODEL")
+	v.BindEnv("embedding.dimension", "OPSMIND_EMBEDDING_DIMENSION")
 
 	// AI
 	v.BindEnv("ai.default_top_k", "OPSMIND_AI_DEFAULT_TOP_K")
@@ -177,11 +192,15 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("minio.secret_key", "minioadmin")
 	v.SetDefault("minio.use_ssl", false)
 
-	// AnythingLLM
-	v.SetDefault("anythingllm.base_url", "http://anythingllm:3001/api")
-	v.SetDefault("anythingllm.api_key", "")
-	v.SetDefault("anythingllm.default_workspace_slug", "opsmind-it-ops")
-	v.SetDefault("anythingllm.timeout_seconds", 20)
+	// LLM
+	v.SetDefault("llm.base_url", "http://llama-cpp:8080/v1")
+	v.SetDefault("llm.api_key", "")
+	v.SetDefault("llm.model", "qwen3-4b")
+	v.SetDefault("llm.max_tokens", 8192)
+
+	// Embedding
+	v.SetDefault("embedding.model", "bge-m3")
+	v.SetDefault("embedding.dimension", 1024)
 
 	// AI
 	v.SetDefault("ai.default_top_k", 5)
