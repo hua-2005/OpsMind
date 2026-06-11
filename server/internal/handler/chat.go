@@ -31,17 +31,12 @@ import (
 // ChatHandler 智能问答接口。
 type ChatHandler struct {
 	svc       *service.ChatService
-	llmClient adapter.LLMClient // v2: 真实 token 级流式（nil 时降级到模拟流式）
+	llmClient adapter.LLMClient // 真实 token 级流式（nil 时降级到模拟流式）
 }
 
 // NewChatHandler 创建 ChatHandler 实例。
-func NewChatHandler(svc *service.ChatService) *ChatHandler {
-	return &ChatHandler{svc: svc}
-}
-
-// SetLLMClient 注入 LLM 客户端（启用真正的 token 级流式输出）。
-func (h *ChatHandler) SetLLMClient(client adapter.LLMClient) {
-	h.llmClient = client
+func NewChatHandler(svc *service.ChatService, llmClient adapter.LLMClient) *ChatHandler {
+	return &ChatHandler{svc: svc, llmClient: llmClient}
 }
 
 // =============================================================================

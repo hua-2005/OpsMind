@@ -45,6 +45,16 @@ func (r *UserRepo) GetByUsername(username string) (*model.User, error) {
 	return &user, nil
 }
 
+// FindByIDs 按 ID 列表批量查询用户（仅返回 id + real_name，供审计等服务使用）。
+func (r *UserRepo) FindByIDs(ids []int64) ([]model.User, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var users []model.User
+	err := r.db.Where("id IN ?", ids).Select("id, real_name").Find(&users).Error
+	return users, err
+}
+
 // GetByPhone 按手机号查询用户。
 //
 // phone 用于报障人身份识别和注册校验。

@@ -79,18 +79,6 @@ func Setup(cfg *config.AppConfig, h *Handlers) *gin.Engine {
 	return r
 }
 
-// placeholder 返回一个占位 Handler，返回 501 Not Implemented。
-// 用于路由骨架注册，后续任务替换为真实 Handler。
-func placeholder() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.JSON(http.StatusNotImplemented, gin.H{
-			"code":    501,
-			"message": "Not Implemented",
-			"data":    nil,
-		})
-	}
-}
-
 // registerPublicRoutes 注册公开路由（无需认证）。
 func registerPublicRoutes(rg *gin.RouterGroup, h *Handlers) {
 	if h != nil && h.Auth != nil {

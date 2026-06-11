@@ -13,24 +13,15 @@ import (
 	"opsmind/internal/dto/response"
 	"opsmind/internal/model"
 	"opsmind/internal/repository"
+	"opsmind/pkg/errcode"
 	"opsmind/pkg/hash"
 	"opsmind/pkg/jwt"
 
 	"gorm.io/gorm"
 )
 
-// AppError 业务错误，包含错误码。
-//
-// 为什么自定义 error 类型而非直接用 errcode 常量：
-// Handler 层需要根据错误码返回不同 HTTP 状态码，AppError 携带 code 便于判断。
-type AppError struct {
-	Code    int
-	Message string
-}
-
-func (e AppError) Error() string {
-	return fmt.Sprintf("[%d] %s", e.Code, e.Message)
-}
+// AppError 是 errcode.AppError 的类型别名，供 service 包内其他文件使用。
+type AppError = errcode.AppError
 
 // AuthService 认证业务逻辑
 type AuthService struct {

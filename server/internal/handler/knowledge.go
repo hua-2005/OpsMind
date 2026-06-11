@@ -1,8 +1,8 @@
 // Package handler 实现 HTTP 请求处理。
 //
 // knowledge.go 提供知识库管理相关接口。
-// Handler 层职责：参数解析、调用 Service、格式化响应。
-// 审核流程和业务规则在 Service 层完成。
+// v2 统一：KnowledgeService 已合并 v1 CRUD + v2 管道/文档上传，
+// 不再需要 SetV2Service 注入。
 package handler
 
 import (
@@ -20,18 +20,12 @@ import (
 
 // KnowledgeHandler 知识库管理接口。
 type KnowledgeHandler struct {
-	svc   *service.KnowledgeService
-	svcV2 *service.KnowledgeServiceV2 // v2: 文档上传/发布管道
+	svc *service.KnowledgeService
 }
 
 // NewKnowledgeHandler 创建 KnowledgeHandler 实例。
 func NewKnowledgeHandler(svc *service.KnowledgeService) *KnowledgeHandler {
 	return &KnowledgeHandler{svc: svc}
-}
-
-// SetV2Service 注入 v2 服务（用于文档上传等新功能）。
-func (h *KnowledgeHandler) SetV2Service(svcV2 *service.KnowledgeServiceV2) {
-	h.svcV2 = svcV2
 }
 
 // =============================================================================
@@ -68,9 +62,8 @@ func (h *KnowledgeHandler) CreateKB(c *gin.Context) {
 //
 // PUT /api/v1/admin/knowledge-bases/:id
 func (h *KnowledgeHandler) UpdateKB(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的知识库 ID")
+	id, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
@@ -109,9 +102,8 @@ func (h *KnowledgeHandler) ListKBs(c *gin.Context) {
 //
 // POST /api/v1/admin/knowledge-bases/:kb_id/articles
 func (h *KnowledgeHandler) CreateArticle(c *gin.Context) {
-	kbID, err := strconv.ParseInt(c.Param("kb_id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的知识库 ID")
+	kbID, ok := parseID(c, "kb_id")
+	if !ok {
 		return
 	}
 
@@ -135,9 +127,8 @@ func (h *KnowledgeHandler) CreateArticle(c *gin.Context) {
 //
 // PUT /api/v1/admin/articles/:id
 func (h *KnowledgeHandler) UpdateArticle(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的文章 ID")
+	id, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
@@ -160,9 +151,8 @@ func (h *KnowledgeHandler) UpdateArticle(c *gin.Context) {
 //
 // POST /api/v1/admin/articles/:id/submit-review
 func (h *KnowledgeHandler) SubmitReview(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的文章 ID")
+	id, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
@@ -179,9 +169,8 @@ func (h *KnowledgeHandler) SubmitReview(c *gin.Context) {
 //
 // POST /api/v1/admin/articles/:id/review
 func (h *KnowledgeHandler) Review(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的文章 ID")
+	id, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
@@ -200,13 +189,12 @@ func (h *KnowledgeHandler) Review(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// Publish 发布文章。
+// Publish 发布文章（v2 管道：分块→embedding→pgvector 写入）。
 //
 // POST /api/v1/admin/articles/:id/publish
 func (h *KnowledgeHandler) Publish(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的文章 ID")
+	id, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
@@ -219,13 +207,12 @@ func (h *KnowledgeHandler) Publish(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// Disable 停用文章。
+// Disable 停用文章（v2：从 pgvector 删除向量）。
 //
 // POST /api/v1/admin/articles/:id/disable
 func (h *KnowledgeHandler) Disable(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的文章 ID")
+	id, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
@@ -241,9 +228,8 @@ func (h *KnowledgeHandler) Disable(c *gin.Context) {
 //
 // POST /api/v1/admin/articles/:id/enable
 func (h *KnowledgeHandler) Enable(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的文章 ID")
+	id, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
@@ -255,17 +241,16 @@ func (h *KnowledgeHandler) Enable(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// RetrySync 重试同步。
+// RetrySync 重试同步（v2 占位）。
 //
 // POST /api/v1/admin/articles/:id/retry-sync
 func (h *KnowledgeHandler) RetrySync(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的文章 ID")
+	id, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
-	if svcErr := h.svc.RetrySync(id); svcErr != nil {
+	if svcErr := h.svc.RetryDocument(id); svcErr != nil {
 		handleServiceError(c, svcErr)
 		return
 	}
@@ -277,22 +262,13 @@ func (h *KnowledgeHandler) RetrySync(c *gin.Context) {
 //
 // GET /api/v1/admin/knowledge-bases/:kb_id/articles
 func (h *KnowledgeHandler) ListArticles(c *gin.Context) {
-	kbID, err := strconv.ParseInt(c.Param("kb_id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的知识库 ID")
+	kbID, ok := parseID(c, "kb_id")
+	if !ok {
 		return
 	}
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	page, pageSize := parsePagination(c)
 	status, _ := strconv.Atoi(c.DefaultQuery("status", "-1"))
-
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 10
-	}
 
 	result, svcErr := h.svc.ListArticles(kbID, status, page, pageSize)
 	if svcErr != nil {
@@ -307,9 +283,8 @@ func (h *KnowledgeHandler) ListArticles(c *gin.Context) {
 //
 // GET /api/v1/admin/articles/:id
 func (h *KnowledgeHandler) GetArticleDetail(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的文章 ID")
+	id, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
@@ -323,99 +298,15 @@ func (h *KnowledgeHandler) GetArticleDetail(c *gin.Context) {
 }
 
 // =============================================================================
-// 辅助函数
-// =============================================================================
-
-// =============================================================================
-// EmbeddingConfig
-// =============================================================================
-
-// CreateEmbeddingConfig 创建 Embedding 配置。
-//
-// POST /api/v1/admin/embedding-configs
-func (h *KnowledgeHandler) CreateEmbeddingConfig(c *gin.Context) {
-	var req request.CreateEmbeddingConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errcode.ErrParam, "参数校验失败: "+err.Error())
-		return
-	}
-
-	if err := h.svc.CreateEmbeddingConfig(req); err != nil {
-		handleServiceError(c, err)
-		return
-	}
-
-	response.Success(c, nil)
-}
-
-// UpdateEmbeddingConfig 更新 Embedding 配置。
-//
-// PUT /api/v1/admin/embedding-configs/:id
-func (h *KnowledgeHandler) UpdateEmbeddingConfig(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的配置 ID")
-		return
-	}
-
-	var req request.UpdateEmbeddingConfigRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, errcode.ErrParam, "参数校验失败: "+err.Error())
-		return
-	}
-
-	if svcErr := h.svc.UpdateEmbeddingConfig(id, req); svcErr != nil {
-		handleServiceError(c, svcErr)
-		return
-	}
-
-	response.Success(c, nil)
-}
-
-// ListEmbeddingConfigs 列出全部 Embedding 配置。
-//
-// GET /api/v1/admin/embedding-configs
-func (h *KnowledgeHandler) ListEmbeddingConfigs(c *gin.Context) {
-	configs, err := h.svc.ListEmbeddingConfigs()
-	if err != nil {
-		response.Error(c, errcode.ErrUnknown, err.Error())
-		return
-	}
-
-	response.Success(c, gin.H{"items": configs})
-}
-
-// DeleteEmbeddingConfig 删除 Embedding 配置。
-//
-// DELETE /api/v1/admin/embedding-configs/:id
-func (h *KnowledgeHandler) DeleteEmbeddingConfig(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的配置 ID")
-		return
-	}
-
-	if err := h.svc.DeleteEmbeddingConfig(id); err != nil {
-		handleServiceError(c, err)
-		return
-	}
-
-	response.Success(c, nil)
-}
-
-// =============================================================================
 // v2 文档上传/状态/重试
 // =============================================================================
 
 // UploadDocuments 上传文档到知识库（multipart form）。
 //
 // POST /api/v1/admin/knowledge-bases/:kb_id/documents/upload
-//
-// 流程：接收文件→校验类型/大小→解析文档→创建文章→入队异步处理。
 func (h *KnowledgeHandler) UploadDocuments(c *gin.Context) {
-	kbID, err := strconv.ParseInt(c.Param("kb_id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的知识库 ID")
+	kbID, ok := parseID(c, "kb_id")
+	if !ok {
 		return
 	}
 
@@ -425,7 +316,6 @@ func (h *KnowledgeHandler) UploadDocuments(c *gin.Context) {
 		return
 	}
 
-	// 校验文件类型
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 	allowedTypes := map[string]bool{
 		".pdf": true, ".docx": true, ".md": true, ".txt": true,
@@ -436,14 +326,12 @@ func (h *KnowledgeHandler) UploadDocuments(c *gin.Context) {
 	}
 	fileType := strings.TrimPrefix(ext, ".")
 
-	// 大小限制 50MB
 	const maxSize = 50 * 1024 * 1024
 	if file.Size > maxSize {
 		response.Error(c, errcode.ErrParam, "文件大小超过限制（最大 50MB）")
 		return
 	}
 
-	// 打开文件
 	src, err := file.Open()
 	if err != nil {
 		response.Error(c, errcode.ErrUnknown, "读取文件失败: "+err.Error())
@@ -453,13 +341,7 @@ func (h *KnowledgeHandler) UploadDocuments(c *gin.Context) {
 
 	userID := getCurrentUserID(c)
 
-	// 调用 v2 服务：解析→创建文章→入队处理
-	if h.svcV2 == nil {
-		response.Error(c, errcode.ErrUnknown, "v2 知识库服务未初始化")
-		return
-	}
-
-	article, err := h.svcV2.UploadDocuments(kbID, userID, file.Filename, fileType, src)
+	article, err := h.svc.UploadDocuments(kbID, userID, file.Filename, fileType, src)
 	if err != nil {
 		handleServiceError(c, err)
 		return
@@ -477,18 +359,12 @@ func (h *KnowledgeHandler) UploadDocuments(c *gin.Context) {
 //
 // GET /api/v1/admin/knowledge-bases/:kb_id/documents/:id/status
 func (h *KnowledgeHandler) GetDocumentStatus(c *gin.Context) {
-	articleID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的文章 ID")
+	articleID, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
-	if h.svcV2 == nil {
-		response.Error(c, errcode.ErrUnknown, "v2 知识库服务未初始化")
-		return
-	}
-
-	status, err := h.svcV2.GetDocumentStatus(articleID)
+	status, err := h.svc.GetDocumentStatus(articleID)
 	if err != nil {
 		handleServiceError(c, err)
 		return
@@ -504,18 +380,12 @@ func (h *KnowledgeHandler) GetDocumentStatus(c *gin.Context) {
 //
 // POST /api/v1/admin/knowledge-bases/:kb_id/documents/:id/retry
 func (h *KnowledgeHandler) RetryDocument(c *gin.Context) {
-	articleID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		response.Error(c, errcode.ErrParam, "无效的文章 ID")
+	articleID, ok := parseID(c, "id")
+	if !ok {
 		return
 	}
 
-	if h.svcV2 == nil {
-		response.Error(c, errcode.ErrUnknown, "v2 知识库服务未初始化")
-		return
-	}
-
-	if err := h.svcV2.RetryDocument(articleID); err != nil {
+	if err := h.svc.RetryDocument(articleID); err != nil {
 		handleServiceError(c, err)
 		return
 	}
@@ -524,17 +394,4 @@ func (h *KnowledgeHandler) RetryDocument(c *gin.Context) {
 		"message":    "重试已提交",
 		"article_id": articleID,
 	})
-}
-
-// getCurrentUserID 从 Gin context 中获取当前用户 ID。
-//
-// JWTAuth 中间件将当前用户 ID 以 int64 类型写入 context，key 为 "userID"。
-// 测试环境中可能不存在，返回 0 作为默认值。
-func getCurrentUserID(c *gin.Context) int64 {
-	if val, exists := c.Get("userID"); exists {
-		if id, ok := val.(int64); ok {
-			return id
-		}
-	}
-	return 0
 }

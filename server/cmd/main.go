@@ -1,7 +1,13 @@
 // Package main 是 OpsMind 后端服务的入口。
 //
 // 负责初始化配置、数据库连接、路由注册和 HTTP 服务启动。
-// MVP 阶段采用单体分层架构，所有模块在同一进程内运行。
+// 采用单体分层架构（Handler→Service→Repository），所有模块在同一进程内运行。
+//
+// v2 架构统一：
+//   - KnowledgeService 合并 v1+v2（CRUD + pgvector 管道 + 文档上传）
+//   - ChatService 合并 v1+v2（自建 RAG Pipeline + LLMClient）
+//   - AuditService 新增，恢复 Handler→Service→Repo 分层
+//   - 移除 SetV2Service / SetLLMClient 等 setter 注入模式
 package main
 
 import (
@@ -51,7 +57,7 @@ func main() {
 	}
 	slog.Info("数据库连接成功")
 
-	// 3. 自动迁移（开发/测试阶段自动建表，生产环境建议用独立迁移脚本）
+	// 3. 自动迁移
 	if err := database.AutoMigrate(db); err != nil {
 		slog.Error("数据库迁移失败", "error", err)
 		os.Exit(1)
@@ -59,13 +65,12 @@ func main() {
 	slog.Info("数据库迁移完成")
 
 	// 4. 初始化 v2 Adapter 层（LLMClient / EmbeddingClient / VectorStore）
-	// LLM 客户端超时：同步 60s，流式 SSE 长连接通过 ctx 控制
 	llmTimeout := 60 * time.Second
 	llmClient := adapter.NewOpenAIClient(cfg.LLM.BaseURL, cfg.LLM.APIKey, llmTimeout)
 	embeddingClient := adapter.NewOpenAIEmbeddingClient(cfg.LLM.BaseURL, cfg.LLM.APIKey, 30*time.Second)
 	slog.Info("v2 LLM/Embedding 客户端已初始化", "base_url", cfg.LLM.BaseURL, "model", cfg.LLM.Model)
 
-	// pgvector 向量存储（使用与 GORM 相同的 DSN）
+	// pgvector 向量存储
 	pgDSN := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		cfg.Database.User, cfg.Database.Password, cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName, cfg.Database.SSLMode)
 	vectorStore, err := adapter.NewPgvectorStore(pgDSN)
@@ -90,43 +95,29 @@ func main() {
 	userService := service.NewUserService(userRepo, db)
 	roleService := service.NewRoleService(roleRepo, userRepo, db)
 	ticketService := service.NewTicketService(ticketRepo)
+	messageService := service.NewMessageService(messageRepo)
+	dashboardService := service.NewDashboardService(db)
+	configService := service.NewConfigService(configRepo)
 
-	// v2: LLM 配置管理（从 DB 加载默认配置）
+	// v2: LLM 配置管理
 	llmConfigRepo := repository.NewLlmConfigRepo(db)
 	llmConfigSvc := service.NewLLMConfigService(llmConfigRepo)
 	slog.Info("v2 LLM 配置服务已初始化")
 
 	// v2: RAG 引擎组件
 	embedder := rag.NewEmbedder(embeddingClient, 20)
-	bm25Seg := rag.NewGseSegmenter()
-	bm25Retriever := rag.NewBM25Retriever(bm25Seg, 30*time.Minute)
-	if vectorStore != nil {
-		slog.Info("v2 RAG 引擎组件已就绪（pgvector 已连接）")
-	}
-
-	// v2: DocParser（多格式文档解析）
 	docParser := rag.NewDocParser()
 
-	// v2: KnowledgeServiceV2（自建 pgvector 发布管道 + 文档上传）
-	knowledgeServiceV2 := service.NewKnowledgeServiceV2(knowledgeRepo, nil, embedder, vectorStore, nil)
-	knowledgeServiceV2.SetDocParser(docParser)
+	// v2: 统一 KnowledgeService（CRUD + pgvector 管道 + 文档上传）
+	knowledgeService := service.NewKnowledgeService(knowledgeRepo, nil, embedder, vectorStore, docParser, nil)
+	slog.Info("v2 KnowledgeService 已初始化（CRUD + pgvector 管道 + 文档上传）")
 
-	// v2: ChatServiceV2（自建 Pipeline 检索）
-	chatServiceV2 := service.NewChatServiceV2(knowledgeRepo, chatRepo, nil, llmClient, llmConfigSvc.GetManager())
+	// v2: 统一 ChatService（自建 Pipeline + LLMClient）
+	chatService := service.NewChatService(knowledgeRepo, chatRepo, nil, llmClient, llmConfigSvc.GetManager())
+	slog.Info("v2 ChatService 已初始化（自建 Pipeline + LLMClient）")
 
-	// v1 兼容：占位（KnowledgeService/ChatService v1 RagClient 已移除，由 v2 服务替代）
-	knowledgeService := service.NewKnowledgeService(knowledgeRepo)
-	chatService := service.NewChatService(knowledgeRepo, chatRepo)
-
-	messageService := service.NewMessageService(messageRepo)
-	dashboardService := service.NewDashboardService(db)
-	configService := service.NewConfigService(configRepo)
-
-	_ = chatServiceV2 // M6 前端接入时使用
-	_ = embedder
-	_ = bm25Retriever
-	_ = llmConfigSvc
-	_ = vectorStore
+	// v2: AuditService（恢复分层架构）
+	auditService := service.NewAuditService(auditRepo, userRepo)
 
 	// 7. 初始化 Handler 层
 	authHandler := handler.NewAuthHandler(authService)
@@ -134,15 +125,13 @@ func main() {
 	roleHandler := handler.NewRoleHandler(roleService)
 	ticketHandler := handler.NewTicketHandler(ticketService, knowledgeService)
 	knowledgeHandler := handler.NewKnowledgeHandler(knowledgeService)
-	knowledgeHandler.SetV2Service(knowledgeServiceV2) // v2: 文档上传/发布管道
-	chatHandler := handler.NewChatHandler(chatService)
-	chatHandler.SetLLMClient(llmClient) // v2: 真实 token 级流式
+	chatHandler := handler.NewChatHandler(chatService, llmClient)
 	messageHandler := handler.NewMessageHandler(messageService)
 	dashboardHandler := handler.NewDashboardHandler(dashboardService)
-	auditHandler := handler.NewAuditHandler(auditRepo, db)
+	auditHandler := handler.NewAuditHandler(auditService)
 	configHandler := handler.NewConfigHandler(configService)
 	llmConfigHandler := handler.NewLLMConfigHandler(llmConfigSvc)
-	llmConfigHandler.SetLLMClient(llmClient) // v2: TestConnection 真实验证
+	llmConfigHandler.SetLLMClient(llmClient)
 
 	// 8. 初始化后台调度器
 	scheduler := service.NewScheduler(ticketRepo)
@@ -163,8 +152,7 @@ func main() {
 		LLMConfig: llmConfigHandler,
 	})
 
-	// 10. 创建 HTTP Server（支持优雅关闭）
-	// WriteTimeout 设为 0 以支持 SSE 长连接；应用层通过 context.WithTimeout 控制超时
+	// 10. 创建 HTTP Server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	srv := &http.Server{
 		Addr:         addr,
@@ -179,7 +167,7 @@ func main() {
 	defer cancel()
 	scheduler.Start(ctx)
 
-	// 12. 启动 HTTP 服务（goroutine）
+	// 12. 启动 HTTP 服务
 	go func() {
 		slog.Info("HTTP 服务已启动", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -188,18 +176,15 @@ func main() {
 		}
 	}()
 
-	// 13. 等待退出信号（SIGINT / SIGTERM）
+	// 13. 优雅关闭
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
 	slog.Info("收到退出信号，开始优雅关闭...", "signal", sig)
 
-	// 14. 优雅关闭
-	// 先停止调度器
 	scheduler.Stop()
 	cancel()
 
-	// 再关闭 HTTP 服务（最多等待 10 秒）
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 

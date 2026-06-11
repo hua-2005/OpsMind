@@ -1,98 +1,211 @@
 // Package service 实现智能问答业务逻辑。
 //
-// v2 迁移说明：ChatService v1（依赖 AnythingLLM RagClient）已被 ChatServiceV2 替代。
-// 本文件保留 CreateChatSession / SubmitFeedback / GetChatDetail 方法签名以确保
-// Handler 层编译通过，但 RagClient 依赖已移除——运行时实际由 ChatServiceV2 提供服务。
+// v2 统一版：合并了原 chat_service.go（v1 占位）和 chat_service_v2.go（自建 RAG Pipeline）。
 //
-// TODO M7: 完成 Handler 层到 ChatServiceV2 的切换后，可删除本文件。
+// 主要变更：
+//   - 移除 AnythingLLM RagClient 依赖
+//   - CreateChatSession 使用自建 RAG Pipeline + LLMClient
+//   - LLMClient 用于答案生成和 token 级流式输出
 package service
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
+	"opsmind/internal/adapter"
 	"opsmind/internal/dto/request"
 	"opsmind/internal/dto/response"
 	"opsmind/internal/model"
-	"opsmind/internal/repository"
+	"opsmind/internal/rag"
 	"opsmind/pkg/errcode"
 )
 
 const (
-	// 置信度阈值：低于此值判定为低置信度，引导用户提交申告。
-	// MVP 阶段硬编码，后续从 system_configs 表读取。
 	defaultConfidenceThreshold = 0.6
-
-	// 降级兜底文本（与 ANYTHINGLLM_AI_INTEGRATION.md §7.1 对齐）
-	fallbackLowConfidence = "暂未找到足够匹配的知识，建议提交申告由运维人员人工处理"
-	fallbackAIUnavailable  = "当前 AI 服务暂不可用，请提交申告由人工处理"
+	fallbackLowConfidence      = "暂未找到足够匹配的知识，建议提交申告由运维人员人工处理"
+	fallbackAIUnavailable      = "当前 AI 服务暂不可用，请提交申告由人工处理"
 )
 
-// ChatService 智能问答服务（v1 占位，已由 ChatServiceV2 替代）。
-type ChatService struct {
-	knowledgeRepo *repository.KnowledgeRepo
-	chatRepo      *repository.ChatRepo
+// 消费者接口——ChatService 仅暴露它实际使用的依赖方法，
+// 遵循 Go "accept interfaces, return structs" 惯例，便于测试 mock。
+type chatKnowledgeRepo interface {
+	FindKBByID(id int64) (*model.KnowledgeBase, error)
 }
 
-// NewChatService 创建 ChatService 实例（v1 占位）。
-func NewChatService(knowledgeRepo *repository.KnowledgeRepo, chatRepo *repository.ChatRepo) *ChatService {
-	return &ChatService{
-		knowledgeRepo: knowledgeRepo,
-		chatRepo:      chatRepo,
+type chatSessionRepo interface {
+	Create(session *model.ChatSession) error
+	CreateBatch(messages []model.ChatMessage) error
+	FindByID(id int64) (*model.ChatSession, error)
+	UpdateFeedback(id int64, feedback int16) error
+}
+
+type chatPipeline interface {
+	Execute(ctx context.Context, query string, kbID int64, opts rag.RAGOptions, onStep rag.StepCallback) (*rag.RAGResult, error)
+}
+
+// ChatService 智能问答服务。
+//
+// knowledgeRepo/chatRepo/pipeline 使用接口类型，便于测试 mock。
+// llmClient 使用 adapter.LLMClient 接口，configMgr 可以为 nil。
+type ChatService struct {
+	knowledgeRepo chatKnowledgeRepo
+	chatRepo      chatSessionRepo
+	pipeline      chatPipeline
+	llmClient     adapter.LLMClient
+	configMgr     *LLMConfigManager
+}
+
+// NewChatService 创建 ChatService 实例。
+//
+// pipeline/llmClient/configMgr 可以为 nil（测试或降级场景）。
+// knowledgeRepo/chatRepo 接受接口类型，repository 具体类型隐式满足。
+func NewChatService(knowledgeRepo interface{}, chatRepo interface{}, pipeline interface{}, llmClient adapter.LLMClient, configMgr *LLMConfigManager) *ChatService {
+	svc := &ChatService{
+		llmClient: llmClient,
+		configMgr: configMgr,
 	}
+	if r, ok := knowledgeRepo.(chatKnowledgeRepo); ok {
+		svc.knowledgeRepo = r
+	}
+	if r, ok := chatRepo.(chatSessionRepo); ok {
+		svc.chatRepo = r
+	}
+	if p, ok := pipeline.(chatPipeline); ok {
+		svc.pipeline = p
+	}
+	return svc
 }
 
 // =============================================================================
 // CreateChatSession
 // =============================================================================
 
-// CreateChatSession 创建问答会话（v1 占位，v2 中由 ChatServiceV2 替代）。
+// CreateChatSession 使用 v2 Pipeline 创建问答会话。
 //
-// v1 依赖 RagClient.Query（AnythingLLM），v2 已迁移到自建 RAG 管道。
-func (s *ChatService) CreateChatSession(req request.CreateChatRequest, userID int64) (*response.ChatSessionResponse, error) {
-	// 参数校验
+// 流程：
+//  1. Pipeline.Execute（查询改写→多路检索→混合检索→重排序）
+//  2. 构造带上下文的 LLM prompt
+//  3. LLMClient.ChatCompletion 生成答案
+//  4. 保存会话
+func (s *ChatService) CreateChatSession(req request.CreateChatRequest, userID int64) (*ChatSessionResponseV2, error) {
 	if strings.TrimSpace(req.Question) == "" {
-		return nil, AppError{Code: errcode.ErrParam, Message: "问题不能为空"}
+		return nil, errcode.AppError{Code: errcode.ErrParam, Message: "问题不能为空"}
 	}
 
-	// 查询知识库
 	if s.knowledgeRepo == nil {
-		return nil, AppError{Code: errcode.ErrAIUnavailable, Message: fallbackAIUnavailable}
+		return nil, errcode.AppError{Code: errcode.ErrAIUnavailable, Message: fallbackAIUnavailable}
 	}
 	_, err := s.knowledgeRepo.FindKBByID(req.KBID)
 	if err != nil {
-		return nil, AppError{Code: errcode.ErrNotFound, Message: "知识库不存在"}
+		return nil, errcode.AppError{Code: errcode.ErrNotFound, Message: "知识库不存在"}
 	}
 
-	// v2: RagClient 已移除，由 ChatServiceV2 + Pipeline 提供 RAG 能力。
-	// 本方法仅作占位——实际通过 SSE 流式端点（StreamChatSession）调用 LLMClient。
-	now := time.Now()
-	answer := fallbackAIUnavailable
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 
+	// Step 1: Pipeline 检索（如果 pipeline 可用）
+	var pipelineChunks []rag.RetrievalResult
+	if s.pipeline != nil {
+		result, pipeErr := s.pipeline.Execute(ctx, req.Question, req.KBID, rag.RAGOptions{
+			TopK:         5,
+			QueryRewrite: true,
+			MultiRoute:   true,
+			Hybrid:       true,
+			Rerank:       true,
+		}, nil)
+		if pipeErr != nil {
+			return nil, errcode.AppError{Code: errcode.ErrRAGUnavailable, Message: "知识检索失败: " + pipeErr.Error()}
+		}
+		if result != nil {
+			pipelineChunks = result.Chunks
+		}
+	}
+
+	var llmAnswer string
+	canSubmit := false
+
+	if len(pipelineChunks) == 0 {
+		llmAnswer = "暂未找到足够匹配的知识，建议提交申告由运维人员人工处理。"
+		canSubmit = true
+	} else if s.llmClient != nil {
+		// Step 2: 构造带上下文的 prompt
+		systemPrompt := "你是一个运维知识助手。根据以下知识库内容回答用户问题。如果知识库中没有相关信息，请如实说明。"
+		var contextBuilder strings.Builder
+		for i, chunk := range pipelineChunks {
+			if i >= 3 {
+				break
+			}
+			contextBuilder.WriteString(fmt.Sprintf("【参考资料 %d】%s\n", i+1, chunk.Content))
+		}
+
+		messages := []adapter.ChatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: fmt.Sprintf("知识库内容：\n%s\n\n用户问题：%s", contextBuilder.String(), req.Question)},
+		}
+
+		// Step 3: LLM 生成
+		model := "default"
+		maxTokens := 2048
+		if s.configMgr != nil {
+			if cfg := s.configMgr.GetConfig(); cfg != nil {
+				model = cfg.LLMModel
+				maxTokens = cfg.MaxTokens
+			}
+		}
+
+		llmResp, llmErr := s.llmClient.ChatCompletion(ctx, adapter.ChatRequest{
+			Messages:    messages,
+			Model:       model,
+			MaxTokens:   maxTokens,
+			Temperature: 0.3,
+		})
+		if llmErr != nil {
+			llmAnswer = "AI 服务不可用，请稍后重试或提交申告。"
+			canSubmit = true
+		} else {
+			llmAnswer = llmResp.Content
+		}
+	} else {
+		// 无 LLM 客户端：直接返回检索内容摘要
+		var summary strings.Builder
+		for i, chunk := range pipelineChunks {
+			if i >= 3 {
+				break
+			}
+			summary.WriteString(fmt.Sprintf("%d. %s\n", i+1, chunk.Content))
+		}
+		llmAnswer = "以下是与您问题相关的知识条目：\n\n" + summary.String()
+	}
+
+	durationMS := int(time.Since(start).Milliseconds())
+
+	// Step 4: 保存会话
+	confidence := float64(len(pipelineChunks)) * 0.3
 	session := &model.ChatSession{
 		UserID:     userID,
 		KBID:       req.KBID,
 		Question:   req.Question,
-		Answer:     answer,
-		Confidence: 0,
-		DurationMs: 0,
+		Answer:     llmAnswer,
+		Confidence: confidence,
+		DurationMs: durationMS,
 	}
 	if s.chatRepo != nil {
 		if err := s.chatRepo.Create(session); err != nil {
-			return nil, AppError{Code: errcode.ErrUnknown, Message: "保存会话失败"}
+			return nil, errcode.AppError{Code: errcode.ErrUnknown, Message: "保存会话失败"}
 		}
 	}
 
-	return &response.ChatSessionResponse{
+	return &ChatSessionResponseV2{
 		SessionID:       session.ID,
 		Question:        req.Question,
-		Answer:          answer,
-		Confidence:      0,
-		CanSubmitTicket: true,
-		DurationMS:      0,
-		Feedback:        0,
-		CreatedAt:       now.Format("2006-01-02 15:04:05"),
+		Answer:          llmAnswer,
+		Confidence:      session.Confidence,
+		CanSubmitTicket: canSubmit,
+		DurationMS:      durationMS,
 	}, nil
 }
 
@@ -103,22 +216,26 @@ func (s *ChatService) CreateChatSession(req request.CreateChatRequest, userID in
 // SubmitFeedback 提交问答反馈。
 func (s *ChatService) SubmitFeedback(sessionID int64, feedback int16) error {
 	if s.chatRepo == nil {
-		return AppError{Code: errcode.ErrUnknown, Message: "服务未初始化"}
+		return errcode.AppError{Code: errcode.ErrUnknown, Message: "服务未初始化"}
 	}
 	if _, err := s.chatRepo.FindByID(sessionID); err != nil {
-		return AppError{Code: errcode.ErrNotFound, Message: "会话不存在"}
+		return errcode.AppError{Code: errcode.ErrNotFound, Message: "会话不存在"}
 	}
 	return s.chatRepo.UpdateFeedback(sessionID, feedback)
 }
 
+// =============================================================================
+// GetChatDetail
+// =============================================================================
+
 // GetChatDetail 查询问答会话详情。
 func (s *ChatService) GetChatDetail(sessionID int64) (*response.ChatSessionResponse, error) {
 	if s.chatRepo == nil {
-		return nil, AppError{Code: errcode.ErrUnknown, Message: "服务未初始化"}
+		return nil, errcode.AppError{Code: errcode.ErrUnknown, Message: "服务未初始化"}
 	}
 	session, err := s.chatRepo.FindByID(sessionID)
 	if err != nil {
-		return nil, AppError{Code: errcode.ErrNotFound, Message: "会话不存在"}
+		return nil, errcode.AppError{Code: errcode.ErrNotFound, Message: "会话不存在"}
 	}
 
 	var sources []response.SourceItem
@@ -137,4 +254,33 @@ func (s *ChatService) GetChatDetail(sessionID int64) (*response.ChatSessionRespo
 		Feedback:        session.Feedback,
 		CreatedAt:       session.CreatedAt.Format("2006-01-02 15:04:05"),
 	}, nil
+}
+
+// =============================================================================
+// 辅助类型
+// =============================================================================
+
+// ChatSessionResponseV2 v2 问答响应（供 Handler 层 SSE 流式输出使用）。
+type ChatSessionResponseV2 struct {
+	SessionID       int64                   `json:"session_id"`
+	Question        string                  `json:"question"`
+	Answer          string                  `json:"answer"`
+	Sources         []response.SourceItem   `json:"sources,omitempty"`
+	Confidence      float64                 `json:"confidence"`
+	CanSubmitTicket bool                    `json:"can_submit_ticket"`
+	DurationMS      int                     `json:"duration_ms"`
+	Pipeline        *ChatPipelineMeta       `json:"pipeline,omitempty"`
+}
+
+// ChatPipelineMeta 管道执行元数据。
+type ChatPipelineMeta struct {
+	Steps           []ChatPipelineStep `json:"steps"`
+	TotalDurationMS int                `json:"total_duration_ms"`
+}
+
+// ChatPipelineStep 管道单步骤耗时。
+type ChatPipelineStep struct {
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	DurationMS int    `json:"duration_ms"`
 }

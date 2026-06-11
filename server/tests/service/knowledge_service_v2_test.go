@@ -44,9 +44,9 @@ func (m *mockKnowledgeRepoV2) UpdateArticle(article *model.KnowledgeArticle) err
 	return nil
 }
 
-func (m *mockKnowledgeRepoV2) UpdateArticleStatus(id int64, status int16) error {
+func (m *mockKnowledgeRepoV2) UpdateArticleStatus(id int64, status int) error {
 	if a, ok := m.articles[id]; ok {
-		a.Status = status
+		a.Status = int16(status)
 		return nil
 	}
 	return fmt.Errorf("not found")
@@ -118,11 +118,14 @@ func TestKnowledgeV2_Publish(t *testing.T) {
 	}
 	store := &mockVectorStoreV2{}
 
-	svc := service.NewKnowledgeServiceV2(repo, chunker, embedder, store, nil)
+	svc := service.NewKnowledgeService(nil, chunker, embedder, store, nil, nil)
+	// 注入 repo（绕过 interface{} 构造器的限制）
+	svc2 := service.NewKnowledgeService(repo, chunker, embedder, store, nil, nil)
 
-	err := svc.PublishV2(10, 1)
+	_ = svc
+	err := svc2.Publish(10, 1)
 	if err != nil {
-		t.Fatalf("PublishV2 失败: %v", err)
+		t.Fatalf("Publish 失败: %v", err)
 	}
 
 	// 向量应已写入
@@ -140,16 +143,16 @@ func TestKnowledgeV2_Publish(t *testing.T) {
 func TestKnowledgeV2_Disable(t *testing.T) {
 	repo := &mockKnowledgeRepoV2{
 		articles: map[int64]*model.KnowledgeArticle{
-			20: {ID: 20, KBID: 1, Question:"旧文档", Answer: "...", Status: 4}, // 已发布
+			20: {ID: 20, KBID: 1, Question: "旧文档", Answer: "...", Status: 4}, // 已发布
 		},
 	}
 	store := &mockVectorStoreV2{}
 
-	svc := service.NewKnowledgeServiceV2(repo, nil, nil, store, nil)
+	svc := service.NewKnowledgeService(repo, nil, nil, store, nil, nil)
 
-	err := svc.DisableV2(20)
+	err := svc.Disable(20)
 	if err != nil {
-		t.Fatalf("DisableV2 失败: %v", err)
+		t.Fatalf("Disable 失败: %v", err)
 	}
 
 	if len(store.deletedIDs) != 1 || store.deletedIDs[0] != 20 {
@@ -161,15 +164,15 @@ func TestKnowledgeV2_Disable(t *testing.T) {
 func TestKnowledgeV2_Enable(t *testing.T) {
 	repo := &mockKnowledgeRepoV2{
 		articles: map[int64]*model.KnowledgeArticle{
-			30: {ID: 30, KBID: 1, Question:"旧文档", Answer: "...", Status: 0}, // 已停用
+			30: {ID: 30, KBID: 1, Question: "旧文档", Answer: "...", Status: 0}, // 已停用
 		},
 	}
 
-	svc := service.NewKnowledgeServiceV2(repo, nil, nil, nil, nil)
+	svc := service.NewKnowledgeService(repo, nil, nil, nil, nil, nil)
 
-	err := svc.EnableV2(30)
+	err := svc.Enable(30)
 	if err != nil {
-		t.Fatalf("EnableV2 失败: %v", err)
+		t.Fatalf("Enable 失败: %v", err)
 	}
 
 	if repo.articles[30].Status != 1 { // 草稿
@@ -181,13 +184,13 @@ func TestKnowledgeV2_Enable(t *testing.T) {
 func TestKnowledgeV2_PublishNotApproved(t *testing.T) {
 	repo := &mockKnowledgeRepoV2{
 		articles: map[int64]*model.KnowledgeArticle{
-			40: {ID: 40, KBID: 1, Question:"草稿", Answer: "...", Status: 1}, // 草稿
+			40: {ID: 40, KBID: 1, Question: "草稿", Answer: "...", Status: 1}, // 草稿
 		},
 	}
 
-	svc := service.NewKnowledgeServiceV2(repo, nil, nil, nil, nil)
+	svc := service.NewKnowledgeService(repo, nil, nil, nil, nil, nil)
 
-	err := svc.PublishV2(40, 1)
+	err := svc.Publish(40, 1)
 	if err == nil {
 		t.Error("草稿状态不可发布，应返回错误")
 	}

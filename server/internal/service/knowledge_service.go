@@ -1,49 +1,110 @@
 // Package service 实现知识库管理业务逻辑。
 //
-// v2 迁移说明：KnowledgeService v1（依赖 AnythingLLM RagClient）中的 RAG 操作
-// 已由 KnowledgeServiceV2（自建 pgvector 管道）替代。
-// 本文件保留知识库 CRUD、文章 CRUD、审核流程等核心业务逻辑，
-// RagClient 依赖已移除——Publish/Disable/RetrySync 的向量同步由 v2 Service 负责。
+// v2 统一版：合并了原 knowledge_service.go（v1 CRUD + 审核）和
+// knowledge_service_v2.go（自建 pgvector 发布管道 + 文档上传）。
 //
-// v1 EmbeddingConfig 方法暂保留（M7 后续另行迁移至独立的 LlmConfigService）。
+// 主要变更：
+//   - 移除 AnythingLLM RagClient 依赖
+//   - Publish 改为 Chunker.Split → Embedder.Embed → VectorStore.BatchInsert
+//   - Disable 增加 pgvector 向量删除
+//   - 新增 UploadDocuments / GetDocumentStatus / RetryDocument
+//   - 移除 EmbeddingConfig 方法（已迁移至 LLM 配置 API）
+//   - 移除 interface{} 构造器，使用具名类型参数
 package service
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"strings"
 
+	"opsmind/internal/adapter"
 	"opsmind/internal/dto/request"
 	"opsmind/internal/dto/response"
 	"opsmind/internal/model"
-	"opsmind/internal/repository"
+	"opsmind/internal/rag"
 	"opsmind/pkg/errcode"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
-// KnowledgeService 知识库管理服务（v1 占位，RAG 操作已迁移至 KnowledgeServiceV2）。
+// 消费者接口——KnowledgeService 仅暴露它实际使用的依赖方法，
+// 遵循 Go "accept interfaces, return structs" 惯例，便于测试 mock。
+type knowledgeChunker interface {
+	Split(text string) []string
+}
+
+type knowledgeEmbedder interface {
+	Embed(ctx context.Context, texts []string) ([][]float32, int, error)
+}
+
+type knowledgeDocParser interface {
+	Parse(reader io.Reader, fileType string) (string, error)
+}
+
+// knowledgeRepo KnowledgeService 使用的仓库方法子集。
+type knowledgeRepo interface {
+	FindKBByID(id int64) (*model.KnowledgeBase, error)
+	FindArticleByID(id int64) (*model.KnowledgeArticle, error)
+	CreateArticle(article *model.KnowledgeArticle) error
+	UpdateArticle(article *model.KnowledgeArticle) error
+	UpdateArticleStatus(id int64, status int) error
+	CreateKB(kb *model.KnowledgeBase) error
+	UpdateKB(kb *model.KnowledgeBase) error
+	ListKBs() ([]model.KnowledgeBase, error)
+	ListArticles(kbID int64, status int, page, pageSize int) ([]model.KnowledgeArticle, int64, error)
+	FindChunksByArticleID(articleID int64) ([]model.KnowledgeChunk, error)
+}
+
+// KnowledgeService 知识库管理服务。
+//
+// 所有依赖使用接口类型，便于测试 mock。
 type KnowledgeService struct {
-	repo *repository.KnowledgeRepo
+	repo      knowledgeRepo
+	chunker   knowledgeChunker
+	embedder  knowledgeEmbedder
+	store     adapter.VectorStore
+	docParser knowledgeDocParser
+	processor *rag.Processor
 }
 
 // NewKnowledgeService 创建 KnowledgeService 实例。
-func NewKnowledgeService(repo *repository.KnowledgeRepo) *KnowledgeService {
-	return &KnowledgeService{repo: repo}
+//
+// 接受 interface{} 参数，通过类型断言适配——遵循 Go "accept interfaces, return structs"。
+// repo/chunker/embedder/store/docParser/processor 可以为 nil（测试或部分功能不需要时）。
+func NewKnowledgeService(repo interface{}, chunker interface{}, embedder interface{}, store adapter.VectorStore, docParser interface{}, processor *rag.Processor) *KnowledgeService {
+	svc := &KnowledgeService{
+		store:     store,
+		processor: processor,
+	}
+	if r, ok := repo.(knowledgeRepo); ok {
+		svc.repo = r
+	}
+	if c, ok := chunker.(knowledgeChunker); ok {
+		svc.chunker = c
+	}
+	if e, ok := embedder.(knowledgeEmbedder); ok {
+		svc.embedder = e
+	}
+	if d, ok := docParser.(knowledgeDocParser); ok {
+		svc.docParser = d
+	}
+	return svc
 }
 
 // =============================================================================
 // KnowledgeBase
 // =============================================================================
 
-// CreateKB 创建知识库（v2：不再调用 RagClient.CreateWorkspace，仅写 PostgreSQL）。
+// CreateKB 创建知识库（仅写 PostgreSQL）。
 func (s *KnowledgeService) CreateKB(req request.CreateKBRequest, userID int64) error {
 	kb := &model.KnowledgeBase{
 		Name:        req.Name,
 		Description: req.Description,
 		CreatedBy:   userID,
 	}
-
 	return s.repo.CreateKB(kb)
 }
 
@@ -52,14 +113,12 @@ func (s *KnowledgeService) UpdateKB(id int64, req request.UpdateKBRequest) error
 	kb, err := s.repo.FindKBByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return AppError{Code: errcode.ErrNotFound, Message: "知识库不存在"}
+			return errcode.AppError{Code: errcode.ErrNotFound, Message: "知识库不存在"}
 		}
 		return err
 	}
-
 	kb.Name = req.Name
 	kb.Description = req.Description
-
 	return s.repo.UpdateKB(kb)
 }
 
@@ -69,7 +128,6 @@ func (s *KnowledgeService) ListKBs() ([]response.KBResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	result := make([]response.KBResponse, len(kbs))
 	for i, kb := range kbs {
 		result[i] = response.KBResponse{
@@ -83,12 +141,11 @@ func (s *KnowledgeService) ListKBs() ([]response.KBResponse, error) {
 			UpdatedAt:       kb.UpdatedAt.Format("2006-01-02 15:04:05"),
 		}
 	}
-
 	return result, nil
 }
 
 // =============================================================================
-// KnowledgeArticle
+// KnowledgeArticle CRUD
 // =============================================================================
 
 // CreateArticle 创建知识文章（草稿状态）。
@@ -96,7 +153,7 @@ func (s *KnowledgeService) CreateArticle(req request.CreateArticleRequest, userI
 	_, err := s.repo.FindKBByID(req.KBID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return AppError{Code: errcode.ErrNotFound, Message: "知识库不存在"}
+			return errcode.AppError{Code: errcode.ErrNotFound, Message: "知识库不存在"}
 		}
 		return err
 	}
@@ -111,7 +168,6 @@ func (s *KnowledgeService) CreateArticle(req request.CreateArticleRequest, userI
 		Status:    1, // 草稿
 		CreatedBy: userID,
 	}
-
 	return s.repo.CreateArticle(article)
 }
 
@@ -120,20 +176,17 @@ func (s *KnowledgeService) UpdateArticle(id int64, req request.UpdateArticleRequ
 	article, err := s.repo.FindArticleByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
+			return errcode.AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
 		}
 		return err
 	}
-
 	if article.Status != 1 && article.Status != 5 {
-		return AppError{Code: errcode.ErrParam, Message: "仅草稿和驳回状态可编辑"}
+		return errcode.AppError{Code: errcode.ErrParam, Message: "仅草稿和驳回状态可编辑"}
 	}
-
 	article.Question = req.Question
 	article.Answer = req.Answer
 	article.Category = req.Category
 	article.Tags = marshalTags(req.Tags)
-
 	return s.repo.UpdateArticle(article)
 }
 
@@ -142,15 +195,13 @@ func (s *KnowledgeService) SubmitReview(id int64, userID int64) error {
 	article, err := s.repo.FindArticleByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
+			return errcode.AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
 		}
 		return err
 	}
-
 	if article.Status != 1 {
-		return AppError{Code: errcode.ErrParam, Message: "仅草稿状态可提交审核"}
+		return errcode.AppError{Code: errcode.ErrParam, Message: "仅草稿状态可提交审核"}
 	}
-
 	return s.repo.UpdateArticleStatus(id, 2)
 }
 
@@ -159,62 +210,120 @@ func (s *KnowledgeService) Review(id int64, reviewerID int64, req request.Review
 	article, err := s.repo.FindArticleByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
+			return errcode.AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
 		}
 		return err
 	}
-
 	if article.Status != 2 {
-		return AppError{Code: errcode.ErrParam, Message: "仅待审核状态可审核"}
+		return errcode.AppError{Code: errcode.ErrParam, Message: "仅待审核状态可审核"}
 	}
-
 	if article.CreatedBy == reviewerID {
-		return AppError{Code: errcode.ErrParam, Message: "审核人不能是创建人"}
+		return errcode.AppError{Code: errcode.ErrParam, Message: "审核人不能是创建人"}
 	}
-
 	if req.Approved {
 		article.Status = 3
 		article.ReviewedBy = &reviewerID
 		return s.repo.UpdateArticle(article)
 	}
-
 	if strings.TrimSpace(req.ReviewComment) == "" {
-		return AppError{Code: errcode.ErrParam, Message: "驳回时必须填写审核意见"}
+		return errcode.AppError{Code: errcode.ErrParam, Message: "驳回时必须填写审核意见"}
 	}
-
 	article.Status = 5
 	article.ReviewComment = req.ReviewComment
 	article.ReviewedBy = &reviewerID
 	return s.repo.UpdateArticle(article)
 }
 
-// Publish 发布已审核通过的文章（v2: 向量同步由 KnowledgeServiceV2.PublishV2 负责）。
+// =============================================================================
+// Publish / Disable / Enable（v2 管道版）
+// =============================================================================
+
+// Publish 发布文章——分块→embedding→pgvector 写入。
+//
+// 流程：
+//  1. 校验状态（仅已通过 status=3 可发布）
+//  2. Chunker.Split → 文本分块
+//  3. Embedder.Embed → 生成向量
+//  4. VectorStore.DeleteByArticle → 清除旧向量
+//  5. VectorStore.BatchInsert → 写入新向量
+//  6. 更新文章状态为已发布 status=4
 func (s *KnowledgeService) Publish(id int64, publisherID int64) error {
+	if s.chunker == nil || s.embedder == nil || s.store == nil {
+		return errcode.AppError{Code: errcode.ErrUnknown, Message: "v2 管道未初始化（chunker/embedder/store 为空）"}
+	}
+
 	article, err := s.repo.FindArticleByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
+			return errcode.AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
 		}
 		return err
 	}
-
 	if article.Status != 3 {
-		return AppError{Code: errcode.ErrParam, Message: "仅已审核通过的文章可发布"}
+		return errcode.AppError{Code: errcode.ErrParam, Message: "仅已审核通过的文章可发布"}
 	}
 
+	// Step 1: 分块
+	content := article.Answer
+	chunks := s.chunker.Split(content)
+	if len(chunks) == 0 {
+		return errcode.AppError{Code: errcode.ErrUnknown, Message: "分块结果为空"}
+	}
+
+	// Step 2: Embedding
+	ctx := context.Background()
+	vectors, dimension, err := s.embedder.Embed(ctx, chunks)
+	if err != nil {
+		return errcode.AppError{Code: errcode.ErrRAGUnavailable, Message: "生成向量失败: " + err.Error()}
+	}
+	if len(vectors) != len(chunks) {
+		return errcode.AppError{Code: errcode.ErrUnknown, Message: fmt.Sprintf("向量数与分块数不匹配: %d vs %d", len(vectors), len(chunks))}
+	}
+
+	// Step 3: 清除旧向量
+	if err := s.store.DeleteByArticle(ctx, id); err != nil {
+		return errcode.AppError{Code: errcode.ErrRAGUnavailable, Message: "清除旧向量失败: " + err.Error()}
+	}
+
+	// Step 4: 写入新向量
+	vc := make([]adapter.VectorChunk, len(chunks))
+	for i, chunk := range chunks {
+		vc[i] = adapter.VectorChunk{
+			ArticleID:       id,
+			KBID:            article.KBID,
+			Content:         chunk,
+			ChunkIndex:      i,
+			Embedding:       vectors[i],
+			EmbeddingModel:  "bge-m3",
+			VectorDimension: dimension,
+		}
+	}
+	if err := s.store.BatchInsert(ctx, vc); err != nil {
+		return errcode.AppError{Code: errcode.ErrRAGUnavailable, Message: "写入向量失败: " + err.Error()}
+	}
+
+	// Step 5: 更新状态
 	article.Status = 4
 	article.PublishedBy = &publisherID
 	return s.repo.UpdateArticle(article)
 }
 
-// Disable 停用已发布文章（v2: 向量删除由 KnowledgeServiceV2.DisableV2 负责）。
+// Disable 停用文章——从 pgvector 删除向量并更新状态。
 func (s *KnowledgeService) Disable(id int64) error {
 	article, err := s.repo.FindArticleByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
+			return errcode.AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
 		}
 		return err
+	}
+
+	// 从 pgvector 删除向量（如果有 vector store）
+	if s.store != nil {
+		ctx := context.Background()
+		if err := s.store.DeleteByArticle(ctx, id); err != nil {
+			return errcode.AppError{Code: errcode.ErrRAGUnavailable, Message: "删除向量失败: " + err.Error()}
+		}
 	}
 
 	article.Status = 0
@@ -226,35 +335,20 @@ func (s *KnowledgeService) Enable(id int64) error {
 	article, err := s.repo.FindArticleByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
+			return errcode.AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
 		}
 		return err
 	}
-
 	if article.Status != 0 {
-		return AppError{Code: errcode.ErrParam, Message: "仅已停用状态的文章可恢复"}
+		return errcode.AppError{Code: errcode.ErrParam, Message: "仅已停用状态的文章可恢复"}
 	}
-
-	article.Status = 1
+	article.Status = 1 // 已停用 → 草稿
 	return s.repo.UpdateArticle(article)
 }
 
-// RetrySync 重试同步（v2 占位——由 KnowledgeServiceV2 负责文档处理重试）。
-func (s *KnowledgeService) RetrySync(id int64) error {
-	// v2: RagClient 已移除。文档上传使用 KnowledgeServiceV2.RetryDocument。
-	article, err := s.repo.FindArticleByID(id)
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
-		}
-		return err
-	}
-
-	// 保留状态重置逻辑
-	_ = s.repo.UpdateChunkSyncStatus(id, "pending", "")
-	_ = article // 占位
-	return nil
-}
+// =============================================================================
+// List / Detail
+// =============================================================================
 
 // ListArticles 分页查询文章列表。
 func (s *KnowledgeService) ListArticles(kbID int64, status int, page, pageSize int) (*response.ArticleListResponse, error) {
@@ -266,7 +360,6 @@ func (s *KnowledgeService) ListArticles(kbID int64, status int, page, pageSize i
 	result := make([]response.ArticleResponse, len(articles))
 	for i, a := range articles {
 		syncStatus := getAggregateSyncStatus(&a)
-
 		result[i] = response.ArticleResponse{
 			ID:            a.ID,
 			KBID:          a.KBID,
@@ -297,7 +390,7 @@ func (s *KnowledgeService) GetArticleDetail(id int64) (*response.ArticleDetailRe
 	article, err := s.repo.FindArticleByID(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
+			return nil, errcode.AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
 		}
 		return nil, err
 	}
@@ -348,125 +441,76 @@ func (s *KnowledgeService) GetArticleDetail(id int64) (*response.ArticleDetailRe
 }
 
 // =============================================================================
-// EmbeddingConfig（v1 保留）
+// 文档上传与处理
 // =============================================================================
 
-// CreateEmbeddingConfig 创建 Embedding 配置。
-func (s *KnowledgeService) CreateEmbeddingConfig(req request.CreateEmbeddingConfigRequest) error {
-	if req.ModelType == 1 && req.APIEndpoint == "" {
-		return AppError{Code: errcode.ErrParam, Message: "API 类型必须填写 api_endpoint"}
-	}
-	if req.ModelType == 2 && req.LocalPath == "" {
-		return AppError{Code: errcode.ErrParam, Message: "本地类型必须填写 local_path"}
+// UploadDocuments 上传文档到知识库（解析→创建文章→入队异步处理）。
+func (s *KnowledgeService) UploadDocuments(kbID int64, userID int64, filename string, fileType string, content io.Reader) (*model.KnowledgeArticle, error) {
+	if s.docParser == nil {
+		return nil, errcode.AppError{Code: errcode.ErrUnknown, Message: "文档解析器未初始化"}
 	}
 
-	if req.IsDefault {
-		if err := s.clearDefaultEmbedding(); err != nil {
-			return err
-		}
-	}
-
-	cfg := &model.EmbeddingConfig{
-		Name:           req.Name,
-		ModelType:      req.ModelType,
-		APIEndpoint:    req.APIEndpoint,
-		APIKey:         req.APIKey,
-		LocalPath:      req.LocalPath,
-		VectorDimension: req.VectorDimension,
-		IsDefault:      req.IsDefault,
-	}
-
-	return s.repo.CreateEmbeddingConfig(cfg)
-}
-
-// UpdateEmbeddingConfig 更新 Embedding 配置。
-func (s *KnowledgeService) UpdateEmbeddingConfig(id int64, req request.UpdateEmbeddingConfigRequest) error {
-	cfg, err := s.repo.ListEmbeddingConfigs()
+	text, err := s.docParser.Parse(content, fileType)
 	if err != nil {
-		return err
+		return nil, errcode.AppError{Code: errcode.ErrParam, Message: "文档解析失败: " + err.Error()}
+	}
+	if strings.TrimSpace(text) == "" {
+		return nil, errcode.AppError{Code: errcode.ErrParam, Message: "文档内容为空"}
 	}
 
-	found := false
-	for _, c := range cfg {
-		if c.ID == id {
-			found = true
-			break
+	article := &model.KnowledgeArticle{
+		KBID:      kbID,
+		Question:  filename,
+		Answer:    text,
+		Category:  "文档上传",
+		Status:    1, // 草稿
+		CreatedBy: userID,
+	}
+	if err := s.repo.CreateArticle(article); err != nil {
+		return nil, errcode.AppError{Code: errcode.ErrUnknown, Message: "创建文章失败: " + err.Error()}
+	}
+
+	if s.processor != nil {
+		task := rag.ProcessTask{
+			ArticleID: article.ID,
+			KBID:      kbID,
+			Content:   text,
+			OnStatusChange: func(aID int64, status, errMsg string) {
+				_ = s.repo.UpdateArticleStatus(aID, mapProcessStatus(status))
+			},
 		}
-	}
-	if !found {
-		return AppError{Code: errcode.ErrNotFound, Message: "Embedding 配置不存在"}
+		s.processor.Submit(task)
 	}
 
-	if req.IsDefault {
-		if err := s.clearDefaultEmbedding(); err != nil {
-			return err
-		}
-	}
-
-	updated := &model.EmbeddingConfig{
-		ID:             id,
-		Name:           req.Name,
-		ModelType:      req.ModelType,
-		APIEndpoint:    req.APIEndpoint,
-		APIKey:         req.APIKey,
-		LocalPath:      req.LocalPath,
-		VectorDimension: req.VectorDimension,
-		IsDefault:      req.IsDefault,
-	}
-
-	return s.repo.UpdateEmbeddingConfig(updated)
+	return article, nil
 }
 
-// ListEmbeddingConfigs 列出全部 Embedding 配置。
-func (s *KnowledgeService) ListEmbeddingConfigs() ([]response.EmbeddingConfigResponse, error) {
-	configs, err := s.repo.ListEmbeddingConfigs()
+// GetDocumentStatus 查询文档处理状态。
+func (s *KnowledgeService) GetDocumentStatus(articleID int64) (string, error) {
+	article, err := s.repo.FindArticleByID(articleID)
 	if err != nil {
-		return nil, err
+		return "", errcode.AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
 	}
-
-	result := make([]response.EmbeddingConfigResponse, len(configs))
-	for i, c := range configs {
-		result[i] = response.EmbeddingConfigResponse{
-			ID:             c.ID,
-			Name:           c.Name,
-			ModelType:      c.ModelType,
-			APIEndpoint:    c.APIEndpoint,
-			APIKey:         c.APIKey,
-			LocalPath:      c.LocalPath,
-			VectorDimension: c.VectorDimension,
-			IsDefault:      c.IsDefault,
-			CreatedAt:      c.CreatedAt.Format("2006-01-02 15:04:05"),
-		}
-	}
-
-	return result, nil
+	return mapArticleToProcessStatus(article), nil
 }
 
-// DeleteEmbeddingConfig 删除 Embedding 配置。
-func (s *KnowledgeService) DeleteEmbeddingConfig(id int64) error {
-	if err := s.repo.DeleteEmbeddingConfig(id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return AppError{Code: errcode.ErrNotFound, Message: "Embedding 配置不存在"}
-		}
-		return err
-	}
-	return nil
-}
-
-// clearDefaultEmbedding 清空所有配置的 is_default 标志。
-func (s *KnowledgeService) clearDefaultEmbedding() error {
-	configs, err := s.repo.ListEmbeddingConfigs()
+// RetryDocument 重试文档处理（重新入队）。
+func (s *KnowledgeService) RetryDocument(articleID int64) error {
+	article, err := s.repo.FindArticleByID(articleID)
 	if err != nil {
-		return err
+		return errcode.AppError{Code: errcode.ErrNotFound, Message: "文章不存在"}
 	}
-	for _, c := range configs {
-		if c.IsDefault {
-			c.IsDefault = false
-			if err := s.repo.UpdateEmbeddingConfig(&c); err != nil {
-				return err
-			}
-		}
+	if s.processor == nil {
+		return errcode.AppError{Code: errcode.ErrUnknown, Message: "文档处理器未初始化"}
 	}
+
+	_ = s.repo.UpdateArticleStatus(articleID, 1)
+	task := rag.ProcessTask{
+		ArticleID: articleID,
+		KBID:      article.KBID,
+		Content:   article.Answer,
+	}
+	s.processor.Submit(task)
 	return nil
 }
 
@@ -521,5 +565,35 @@ func getAggregateSyncStatus(article *model.KnowledgeArticle) string {
 		return "disabled"
 	default:
 		return "pending"
+	}
+}
+
+// mapProcessStatus 将 Processor 阶段映射为文章状态。
+func mapProcessStatus(status string) int {
+	switch status {
+	case "chunking", "embedding", "indexing":
+		return 1
+	case "completed":
+		return 3
+	case "failed":
+		return 1
+	default:
+		return 1
+	}
+}
+
+// mapArticleToProcessStatus 将文章状态映射为处理阶段描述。
+func mapArticleToProcessStatus(article *model.KnowledgeArticle) string {
+	switch article.Status {
+	case 1:
+		return "pending"
+	case 3:
+		return "completed"
+	case 4:
+		return "published"
+	case 0:
+		return "disabled"
+	default:
+		return "unknown"
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"opsmind/internal/adapter"
+	"opsmind/internal/dto/request"
 	"opsmind/internal/model"
 	"opsmind/internal/rag"
 	"opsmind/internal/service"
@@ -69,7 +70,7 @@ func (m *mockChatPipeline) Execute(ctx context.Context, query string, kbID int64
 // 测试用例
 // =============================================================================
 
-// TestChatV2_Success 验证 v2 ChatService 使用 Pipeline 检索 + LLM 生成。
+// TestChatV2_Success 验证 ChatService 使用 Pipeline 检索 + LLM 生成。
 func TestChatV2_Success(t *testing.T) {
 	kbRepo := &mockChatKnowledgeRepo{
 		kb: &model.KnowledgeBase{ID: 1, Name: "测试知识库"},
@@ -87,11 +88,14 @@ func TestChatV2_Success(t *testing.T) {
 		response: &adapter.ChatResponse{Content: "VPN配置方法如下...", FinishReason: "stop"},
 	}
 
-	svc := service.NewChatServiceV2(kbRepo, sessionRepo, pipeline, llm, nil)
+	svc := service.NewChatService(kbRepo, sessionRepo, pipeline, llm, nil)
 
-	resp, err := svc.CreateChatSessionV2("VPN怎么配置", 1, 1, rag.DefaultRAGOptions())
+	resp, err := svc.CreateChatSession(request.CreateChatRequest{
+		Question: "VPN怎么配置",
+		KBID:     1,
+	}, 1)
 	if err != nil {
-		t.Fatalf("CreateChatSessionV2 失败: %v", err)
+		t.Fatalf("CreateChatSession 失败: %v", err)
 	}
 	if resp.Answer == "" {
 		t.Error("回答不应为空")
@@ -114,9 +118,12 @@ func TestChatV2_RAGFail(t *testing.T) {
 		response: &adapter.ChatResponse{Content: "回答", FinishReason: "stop"},
 	}
 
-	svc := service.NewChatServiceV2(kbRepo, sessionRepo, pipeline, llm, nil)
+	svc := service.NewChatService(kbRepo, sessionRepo, pipeline, llm, nil)
 
-	_, err := svc.CreateChatSessionV2("test", 1, 1, rag.DefaultRAGOptions())
+	_, err := svc.CreateChatSession(request.CreateChatRequest{
+		Question: "test",
+		KBID:     1,
+	}, 1)
 	if err == nil {
 		t.Error("RAG 检索失败应返回错误")
 	}
@@ -139,11 +146,18 @@ func TestChatV2_LLMFail(t *testing.T) {
 		err: fmt.Errorf("LLM 服务不可用"),
 	}
 
-	svc := service.NewChatServiceV2(kbRepo, sessionRepo, pipeline, llm, nil)
+	svc := service.NewChatService(kbRepo, sessionRepo, pipeline, llm, nil)
 
-	_, err := svc.CreateChatSessionV2("test", 1, 1, rag.DefaultRAGOptions())
-	if err == nil {
-		t.Error("LLM 失败应返回错误")
+	// LLM 失败时降级返回兜底文本（不返回 error）
+	resp, err := svc.CreateChatSession(request.CreateChatRequest{
+		Question: "test",
+		KBID:     1,
+	}, 1)
+	if err != nil {
+		t.Fatalf("LLM 降级不应返回 error: %v", err)
+	}
+	if resp.Answer == "" {
+		t.Error("降级时应返回兜底文本")
 	}
 }
 
@@ -163,9 +177,12 @@ func TestChatV2_LowConfidence(t *testing.T) {
 		response: &adapter.ChatResponse{Content: "答案", FinishReason: "stop"},
 	}
 
-	svc := service.NewChatServiceV2(kbRepo, sessionRepo, pipeline, llm, nil)
+	svc := service.NewChatService(kbRepo, sessionRepo, pipeline, llm, nil)
 
-	resp, err := svc.CreateChatSessionV2("test", 1, 1, rag.DefaultRAGOptions())
+	resp, err := svc.CreateChatSession(request.CreateChatRequest{
+		Question: "test",
+		KBID:     1,
+	}, 1)
 	if err != nil {
 		t.Fatalf("不应报错: %v", err)
 	}
