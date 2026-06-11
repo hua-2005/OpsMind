@@ -75,7 +75,7 @@ flowchart LR
     subgraph Router["router.Setup(cfg, handlers)"]
         direction TB
         S1["gin.SetMode(cfg.Server.Mode)"]
-        S2["r := gin.New()"]
+        S2["r = gin.New()"]
         S3["r.Use(RequestID())"]
         S4["r.Use(CORS())"]
         S5["r.Use(Logger())"]

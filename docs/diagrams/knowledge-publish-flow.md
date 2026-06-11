@@ -1,212 +1,204 @@
-# 知识发布与同步流程 (Knowledge Publish Flow)
+# 知识发布与同步流程 (Knowledge Publish & Sync Flow)
 
-> **设计来源：** TECH.md §10.2 知识同步与停用流程 + PLAN.md T18/T19
-> **对应任务：** T18（知识库 Service+Handler）、T19（Embedding 配置）、T20（RagClient 适配器）— ✅ 已实现
-> **实现文件：** `handler/knowledge.go` → `service/knowledge_service.go` → `repository/knowledge_repo.go` → `adapter/rag_client.go`（✅ M3）
+> **涉及文件：** `handler/knowledge.go` → `service/knowledge_service.go` → `adapter/rag_client.go` → AnythingLLM
+> **同步状态：** pending → synced / failed / disabled
 
 ---
 
-## 1. 知识条目生命周期 (Status 状态机)
+## 1. 知识库创建流程
+
+```mermaid
+sequenceDiagram
+    actor A as 知识库管理员
+    participant KH as KnowledgeHandler<br/>handler/knowledge.go
+    participant KS as KnowledgeService<br/>service/knowledge_service.go
+    participant KR as KnowledgeRepo<br/>repository/knowledge_repo.go
+    participant Rag as RagClient<br/>adapter/rag_client.go
+    participant AL as AnythingLLM<br/>:3001/api
+    participant DB as PostgreSQL
+
+    A->>KH: POST /api/v1/admin/knowledge-bases<br/>{name, description}
+    KH->>KS: s.KnowledgeService.CreateKB(req, userID)
+    
+    Note over KS: === 步骤1: 创建 AnythingLLM 工作区 ===
+    KS->>Rag: CreateWorkspace(ctx, RAGCreateWorkspaceRequest{<br/>  Name, EmbeddingModel, EmbeddingEngine:"generic-openai"<br/>})
+    Rag->>AL: POST /api/v1/workspace/new<br/>{name, chatMode:"query", topN:5,<br/> similarityThreshold:0.6}
+    AL-->>Rag: {workspace: {slug}}
+    Rag-->>KS: *RAGCreateWorkspaceResponse{Slug}
+    
+    alt 创建失败
+        KS-->>KH: AppError{20002, "创建 RAG 工作区失败"}
+        KH-->>A: {"code": 20002}
+    end
+    
+    Note over KS: === 步骤2: 持久化知识库 ===
+    KS->>KR: CreateKB(&KnowledgeBase{<br/>  Name, Description,<br/>  RAGWorkspaceSlug, EmbeddingModel, CreatedBy<br/>})
+    KR->>DB: INSERT INTO knowledge_bases
+    DB-->>KR: ok
+    
+    KS-->>KH: nil
+    KH-->>A: {"code": 0}
+```
+
+---
+
+## 2. 知识文章完整生命周期
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 草稿 : CreateArticle
-    草稿 --> 草稿 : UpdateArticle (可编辑)
-    草稿 --> 待审核 : SubmitReview
-    草稿 --> 已停用 : Disable
+    [*] --> 草稿: CreateArticle()<br/>status=1
+    
+    草稿 --> 待审核: SubmitReview()<br/>仅草稿可提交
+    
+    待审核 --> 已通过: Review(approved=true)<br/>审核人≠创建人
+    
+    待审核 --> 已驳回: Review(approved=false)<br/>必须填写 review_comment
+    
+    已驳回 --> 草稿: UpdateArticle()<br/>驳回后可重新编辑
+    已驳回 --> 待审核: SubmitReview()<br/>重新提交
+    
+    已通过 --> 已发布: Publish()<br/>调用 RagClient.SyncDocument
+    
+    已发布 --> 已停用: Disable()<br/>调用 RagClient.DisableDocument
+    
+    已停用 --> [*]
 
-    待审核 --> 已发布 : Review (通过) + Publish
-    待审核 --> 驳回 : Review (驳回)<br/>需填写 review_comment
-
-    驳回 --> 草稿 : UpdateArticle (重新编辑)
-    驳回 --> 待审核 : SubmitReview
-
-    已发布 --> 已停用 : Disable<br/>调用 RagClient.DisableDocument
-    已停用 --> 已发布 : 重试同步? (RetrySync)
-
-    note right of 待审核
-        校验: reviewer_id ≠ created_by
-        违反 → ErrorCode 10003
-    end note
-
-    note left of 已发布
-        sync_status = 'synced' | 'failed'
-        成功: 保存 rag_document_location
-        失败: sync_status='failed', 记录 sync_error
+    note right of 已发布
+        Publish 内部流程:
+        1. RagClient.SyncDocument()
+        2. 保存 rag_document_location
+        3. 更新 sync_status
+        4. 写入 pgvector chunks
+        ---
+        失败时:
+        article.status 仍为 4 (已发布)
+        chunk.sync_status = 'failed'
+        chunk.sync_error = 错误详情
+        支持 RetrySync() 重试
     end note
 ```
 
 ---
 
-## 2. 发布同步流程 (Publish → AnythingLLM)
+## 3. 发布同步详细流程
 
 ```mermaid
 sequenceDiagram
-    autonumber
-    actor Admin as 管理员
-    participant H as KnowledgeHandler
-    participant S as KnowledgeService
-    participant R as KnowledgeRepo
-    participant RC as RagClient (adapter)
+    actor A as 知识库管理员
+    participant KH as KnowledgeHandler
+    participant KS as KnowledgeService<br/>Publish()
+    participant KR as KnowledgeRepo
+    participant Rag as RagClient<br/>SyncDocument
     participant AL as AnythingLLM
-    participant PG as PostgreSQL pgvector
+    participant DB as PostgreSQL
 
-    Note over Admin,PG: === POST /api/v1/admin/knowledge-articles/:id/publish ===
-
-    Admin->>H: Publish 请求
-    H->>H: c.ShouldBindJSON
-    H->>S: Publish(articleID, publisherID)
-
-    rect rgb(40, 50, 60)
-        Note over S: === KnowledgeService.Publish ===
-
-        S->>R: FindArticleByID(articleID)
-        R-->>S: *KnowledgeArticle (含 KnowledgeBase)
-
-        S->>S: 校验: article.Status == 3 (已审核通过)
-        S->>S: 校验: article.CreatedBy != publisherID (不能自审自发)
-
-        par AnythingLLM 同步
-            S->>RC: SyncDocument(RAGSyncRequest{<br/>  WorkspaceSlug: kb.RAGWorkspaceSlug,<br/>  Content: "Q: article.Question\nA: article.Answer",<br/>  IsFile: false,<br/>  Metadata: {"docSource": "knowledge_articles:ID"}<br/>})
-            RC->>AL: POST /api/v1/document/raw-text
-            AL-->>RC: {documents: [{location: "custom-documents/..."}]}
-            RC-->>S: &RAGSyncResponse{DocumentLocation}
-        and pgvector 写入
-            S->>S: 生成 embedding 向量
-            Note over S: 按 kb.EmbeddingModel + kb.VectorDimension
-            S->>R: CreateChunks([]KnowledgeChunk{{content, embedding, ...}})
-            R->>PG: INSERT INTO knowledge_chunks (embedding) VALUES (...)
-        end
-
-        S->>R: UpdateArticleStatus(articleID, 3) → status='已发布'
-        S->>R: UpdateChunkSyncStatus(articleID, "synced", "")
+    A->>KH: POST /api/v1/admin/articles/:id/publish
+    KH->>KS: s.KnowledgeService.Publish(id, publisherID)
+    
+    KS->>KR: FindArticleByID(id) → article<br/>(预加载 KnowledgeBase)
+    KR->>DB: SELECT * FROM knowledge_articles<br/>JOIN knowledge_bases
+    DB-->>KR: *KnowledgeArticle{KnowledgeBase}
+    
+    alt article.Status != 3 (已审核通过)
+        KS-->>KH: AppError{10003, "仅已审核通过的文章可发布"}
+        KH-->>A: {"code": 10003}
     end
-
-    S-->>H: nil
-    H-->>Admin: 200 {code:0}
+    
+    Note over KS: === 同步到 AnythingLLM ===
+    KS->>Rag: SyncDocument(ctx, RAGSyncRequest{<br/>  WorkspaceSlug, Title, Content, Mode:"raw-text"<br/>})
+    Rag->>AL: POST /api/v1/document/raw-text<br/>{textContent, addToWorkspaces, metadata}
+    AL-->>Rag: {success:true, documents:[{location}]}
+    Rag-->>KS: *RAGSyncResponse{DocumentLocation}
+    
+    alt 同步失败
+        Rag-->>KS: error
+    end
+    
+    Note over KS: === 更新文章状态 ===
+    KS->>KS: article.Status = 4 (已发布)
+    KS->>KS: article.PublishedBy = &publisherID
+    alt 同步成功
+        KS->>KS: article.RAGDocumentLocation = syncResp.DocumentLocation
+    end
+    KS->>KR: UpdateArticle(article)
+    KR->>DB: UPDATE knowledge_articles SET status=4, ...
+    
+    Note over KS: === 更新切片同步状态 ===
+    alt 同步成功
+        KS->>KR: FindChunksByArticleID(id)
+        alt 已有 chunks
+            KS->>KR: UpdateChunkSyncStatus(id, "synced", "")
+        else 无 chunks (首次发布)
+            KS->>KR: CreateChunks([{content, embedding,<br/>  embedding_model, vector_dimension,<br/>  sync_status:"synced"}])
+        end
+    else 同步失败
+        KS->>KR: UpdateChunkSyncStatus(id, "failed", syncErr.Error())
+    end
+    
+    KS-->>KH: nil
+    KH-->>A: {"code": 0}
 ```
 
 ---
 
-## 3. RagClient 适配器接口
+## 4. 停用与重试流程
 
 ```mermaid
-classDiagram
-    class RagClient {
-        <<interface>>
-        +Query(ctx, RAGQueryRequest) *RAGQueryResponse
-        +SyncDocument(ctx, RAGSyncRequest) *RAGSyncResponse
-        +DisableDocument(ctx, RAGDisableRequest) error
-        +CreateWorkspace(ctx, RAGCreateWorkspaceRequest) *RAGCreateWorkspaceResponse
-    }
+sequenceDiagram
+    actor A as 知识库管理员
+    participant KH as KnowledgeHandler
+    participant KS as KnowledgeService
+    participant KR as KnowledgeRepo
+    participant Rag as RagClient
+    participant AL as AnythingLLM
+    participant DB as PostgreSQL
 
-    class anythingLLMClient {
-        -baseURL string
-        -apiKey string
-        -httpClient *http.Client
-        +Query(...)
-        +SyncDocument(...)
-        +DisableDocument(...)
-        +CreateWorkspace(...)
-    }
+    Note over A,DB: ===== 停用流程 =====
+    A->>KH: POST /api/v1/admin/articles/:id/disable
+    KH->>KS: s.KnowledgeService.Disable(id)
+    
+    KS->>KR: FindArticleByID(id) → article
+    
+    alt article.RAGDocumentLocation != ""
+        KS->>Rag: DisableDocument(ctx, RAGDisableRequest{<br/>  WorkspaceSlug, DocumentLocations: [article.RAGDocumentLocation]<br/>})
+        Rag->>AL: POST /api/v1/workspace/{slug}/update-embeddings<br/>{deletes: [document_location]}
+        AL-->>Rag: ok (忽略错误)
+    end
+    
+    KS->>KR: UpdateArticle(article) → status=0
+    KS->>KR: UpdateChunkStatusByArticleID(id, "disabled")
+    KR->>DB: UPDATE knowledge_articles SET status=0<br/>UPDATE knowledge_chunks SET sync_status='disabled'
+    
+    KS-->>KH: nil
+    KH-->>A: {"code": 0}
 
-    class RAGQueryRequest {
-        +WorkspaceSlug string
-        +Question string
-        +SessionID string
-        +TopK int
-    }
-
-    class RAGQueryResponse {
-        +Answer string
-        +Sources []RAGSource
-        +Confidence float64
-        +ChatID string
-        +DurationMS int64
-        +Error string
-    }
-
-    class RAGSource {
-        +DocName string
-        +ChunkContent string
-        +Score float64
-    }
-
-    RagClient <|.. anythingLLMClient
-    anythingLLMClient --> RAGQueryRequest : uses
-    anythingLLMClient --> RAGQueryResponse : returns
-    RAGQueryResponse --> RAGSource : contains
+    Note over A,DB: ===== 重试同步 =====
+    A->>KH: POST /api/v1/admin/articles/:id/retry-sync
+    KH->>KS: s.KnowledgeService.Publish(id, publisherID)
+    Note over KS: 重新执行完整 Publish 流程<br/>（同上，重新调用 RagClient.SyncDocument）
 ```
 
 ---
 
-## 4. 知识同步失败与重试
+## 5. Embedding 配置管理
 
 ```mermaid
 flowchart TD
-    A["Publish 被调用"] --> B["调用 RagClient.SyncDocument"]
-    B --> C{AnythingLLM 响应?}
-
-    C -->|成功| D["保存 rag_document_location<br/>sync_status = 'synced'"]
-    C -->|失败/超时| E["sync_status = 'failed'<br/>sync_error = 错误详情"]
-
-    D --> F["pgvector 写入"]
-    F --> G{写入成功?}
-    G -->|是| H["发布完成 ✅"]
-    G -->|否| I["记录日志<br/>不影响 AnythingLLM 同步状态"]
-
-    E --> J["管理员在后台看到失败状态"]
-    J --> K["点击「重试同步」"]
-    K --> L["RetrySync(articleID)"]
-    L --> A
-
-    style D fill:#2ecc71,color:#fff
-    style E fill:#e74c3c,color:#fff
-    style H fill:#2ecc71,color:#fff
-```
-
----
-
-## 5. 知识停用流程
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Admin as 管理员
-    participant H as KnowledgeHandler
-    participant S as KnowledgeService
-    participant R as KnowledgeRepo
-    participant RC as RagClient
-    participant AL as AnythingLLM
-
-    Note over Admin,AL: === POST /api/v1/admin/knowledge-articles/:id/disable ===
-
-    Admin->>H: Disable 请求
-    H->>S: Disable(articleID)
-
-    S->>R: FindArticleByID(articleID)
-    R-->>S: *KnowledgeArticle
-
-    S->>RC: DisableDocument(RAGDisableRequest{<br/>  WorkspaceSlug,<br/>  DocumentLocations: [article.RAGDocumentLocation]<br/>})
-    RC->>AL: POST /api/v1/workspace/{slug}/update-embeddings<br/>{deletes: [document_location]}
-    AL-->>RC: 200 OK
-
-    S->>R: UpdateChunkStatusByArticleID(articleID, "disabled")
-    S->>R: UpdateArticleStatus(articleID, 4)
-
-    S-->>H: nil
-    H-->>Admin: 200 {code:0}
-```
-
----
-
-## 6. 知识同步状态枚举
-
-```mermaid
-flowchart LR
-    PENDING["pending<br/>待同步"] -->|Publish 成功| SYNCED["synced<br/>已同步"]
-    PENDING -->|Publish 失败| FAILED["failed<br/>同步失败"]
-    FAILED -->|RetrySync 成功| SYNCED
-    SYNCED -->|Disable| DISABLED["disabled<br/>已停用"]
-    FAILED -->|Disable| DISABLED
+    Start([系统管理员]) --> List[GET /admin/embedding-configs<br/>KnowledgeService.ListEmbeddingConfigs]
+    List --> Table[展示所有 Embedding 配置]
+    
+    Table --> Create[POST 新增]
+    Table --> Update[PUT 更新]
+    Table --> Delete[DELETE 删除]
+    
+    Create --> Validate{model_type?}
+    Validate -->|1: API 接入| CheckAPI["校验 api_endpoint 必填"]
+    Validate -->|2: 本地部署| CheckLocal["校验 local_path 必填"]
+    
+    CheckAPI --> SetDefault{is_default == true?}
+    CheckLocal --> SetDefault
+    
+    SetDefault -->|是| UnsetOthers["将所有其他配置的<br/>is_default 设为 false"]
+    SetDefault -->|否| Save["INSERT INTO embedding_configs"]
+    UnsetOthers --> Save
 ```
