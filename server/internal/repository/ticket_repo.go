@@ -109,7 +109,6 @@ func (r *TicketRepo) ListAll(status int, urgency int, page, pageSize int) ([]mod
 	var total int64
 
 	query := r.db.Model(&model.Ticket{})
-
 	if status >= 0 {
 		query = query.Where("status = ?", status)
 	}
@@ -124,6 +123,26 @@ func (r *TicketRepo) ListAll(status int, urgency int, page, pageSize int) ([]mod
 	offset := (page - 1) * pageSize
 	if err := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&tickets).Error; err != nil {
 		return nil, 0, err
+	}
+
+	// 批量查询用户名并填充（GORM Preload 在 Count 后不可靠）
+	if len(tickets) > 0 {
+		ids := make([]int64, len(tickets))
+		for i, t := range tickets {
+			ids[i] = t.UserID
+		}
+		var users []model.User
+		if err := r.db.Where("id IN ?", ids).Find(&users).Error; err == nil {
+			userMap := make(map[int64]model.User, len(users))
+			for _, u := range users {
+				userMap[u.ID] = u
+			}
+			for i := range tickets {
+				if u, ok := userMap[tickets[i].UserID]; ok {
+					tickets[i].User = u
+				}
+			}
+		}
 	}
 
 	return tickets, total, nil

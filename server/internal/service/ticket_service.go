@@ -346,7 +346,7 @@ func (s *TicketService) GetDetail(id int64) (*response.TicketDetailResponse, err
 // toTicketItem 将 model.Ticket 转换为 TicketItem。
 func toTicketItem(t *model.Ticket) response.TicketItem {
 	submitterName := ""
-	if t.User.Username != "" {
+	if t.User.ID != 0 {
 		submitterName = t.User.RealName
 	}
 

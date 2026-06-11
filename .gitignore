@@ -68,3 +68,4 @@ logs/
 *.bak
 *.cache
 Course Design
+.playwright-mcp

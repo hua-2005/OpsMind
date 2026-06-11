@@ -100,7 +100,7 @@ const articles = ref<Article[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const statusFilter = ref(0)
+const statusFilter = ref(-1)  // 默认显示全部状态
 const showKBDialog = ref(false)
 const newKB = ref({ name: '', description: '' })
 
@@ -116,7 +116,8 @@ const fetchArticles = async () => {
     const params: any = { page: currentPage.value, page_size: pageSize.value }
     if (statusFilter.value !== -1) params.status = statusFilter.value
     const res = await listArticles(selectedKB.value.id, params)
-    articles.value = res.data.articles || []; total.value = res.data.total || 0
+    const list = Array.isArray(res.data) ? res.data : (res.data.articles || [])
+    articles.value = list; total.value = res.data.total || list.length || 0
   } catch (e) { console.error(e) }
 }
 const handleCreateKB = async () => {
