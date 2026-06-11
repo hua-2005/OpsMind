@@ -334,44 +334,41 @@ docker compose --profile ai-local up -d --build
 
 ### 3.4 初始化 API Key
 
-AnythingLLM 的 API Key 必须由 AnythingLLM 系统生成。初始化阶段允许临时暴露管理端口：
+**推荐：一键自动初始化**
 
-```yaml
-anythingllm:
-  ports:
-    - "3001:3001"
+```powershell
+# 在项目根目录执行
+make setup
 ```
 
-然后执行：
+脚本会自动完成：
+1. 启动 AnythingLLM 容器
+2. 等待服务就绪
+3. 自动尝试生成 API Key
+4. 如自动生成失败，自动打开浏览器并引导手动创建
+5. 将 API Key 写入 `.env`
+6. 创建默认知识库工作区 `opsmind-it-ops`
+7. 重启 OpsMind 后端（无编译，仅重启容器）
+
+**备选：纯手动方式（不推荐）**
 
 ```powershell
 cd D:\Projects\Personal\OpsMind
+
+# 启动 AnythingLLM
 docker compose up -d anythingllm
+
+# 浏览器访问 http://localhost:3001，完成初始化向导
+# → Settings → API Keys → Create API Key
+
+# 将 Key 写入 .env
+# ANYTHINGLLM_API_KEY=刚创建的APIKey
+
+# 重启 OpsMind 后端（不需要 --build！API Key 是运行时环境变量）
+docker compose up -d opsmind-server
 ```
 
-浏览器临时访问：
-
-```text
-http://localhost:3001
-```
-
-完成初始化向导后（LLM 选 Generic OpenAI、Embedding 选 Generic OpenAI Embedding、Vector DB 选 LanceDB），在 `Settings → API Keys` 创建 API Key，写入 `.env`：
-
-```dotenv
-ANYTHINGLLM_API_KEY=刚创建的APIKey
-```
-
-然后注释掉 `ports`，让 AnythingLLM 只在 Docker 内网可见：
-
-```powershell
-docker compose up -d --build
-```
-
-日常使用只访问 OpsMind 前端：
-
-```text
-http://localhost:5173
-```
+> **注意：** API Key 是运行时环境变量，写入 `.env` 后只需要 `docker compose up -d` 重启容器，**不需要重新编译**。
 
 ---
 
@@ -593,62 +590,38 @@ POST /api/v1/openai/embeddings
 
 ---
 
-## 6. OpsMind 推荐代码文件
+## 6. OpsMind 已实现的代码文件
 
-OpsMind 目前还没有代码目录。按 `docs/TECH.md` 的 Go + Vue 结构，建议后续落地这些文件：
+以下文件已在 M1-M6 各里程碑中全部实现，与 `docs/TECH.md` 的 Go + Vue 结构对齐：
 
-### 6.1 后端
+### 6.1 后端（全部已实现 ✅）
 
 | 文件 | 作用 |
 | --- | --- |
-| `server/internal/config/config.go` | 增加 `AnythingLLMConfig`、`AIConfig`，读取 Docker 内部 URL |
-| `server/internal/adapter/rag_client.go` | 定义 `RagClient` 接口和 AnythingLLM HTTP 实现 |
+| `server/internal/config/config.go` | `AnythingLLMConfig`、`AIConfig`，读取 Docker 内部 URL |
+| `server/internal/adapter/rag_client.go` | `RagClient` 接口和 AnythingLLM HTTP 实现 |
 | `server/tests/adapter/rag_client_test.go` | Mock AnythingLLM，验证请求、响应映射和异常降级 |
-| `server/internal/service/chat_service.go` | 实现 `CreateChatSession`，调用 `RagClient.Query`，保存问答和来源 |
+| `server/internal/service/chat_service.go` | `CreateChatSession`，调用 `RagClient.Query`，保存问答和来源 |
 | `server/internal/service/knowledge_service.go` | 发布知识时调用 `RagClient.SyncDocument`，保存同步状态 |
-| `server/internal/handler/chat.go` | 暴露 `POST /api/v1/portal/chat-sessions` 和反馈接口 |
-| `server/internal/handler/knowledge.go` | 暴露知识发布、停用、重试同步接口 |
-| `server/internal/model/chat.go` | 保存问题、答案、sources、confidence、feedback、duration |
-| `server/internal/model/knowledge.go` | 保存 `rag_workspace_slug`、`rag_document_location`、`sync_status`、`sync_error` |
+| `server/internal/handler/chat.go` | `POST /api/v1/portal/chat-sessions` 和反馈接口 |
+| `server/internal/handler/knowledge.go` | 知识发布、停用、重试同步接口 |
+| `server/internal/model/chat.go` | 问题、答案、sources、confidence、feedback、duration |
+| `server/internal/model/knowledge.go` | `rag_workspace_slug`、`rag_document_location`、`sync_status`、`sync_error` |
 | `server/internal/repository/chat_repo.go` | 问答会话持久化 |
 | `server/internal/repository/knowledge_repo.go` | 知识发布和同步状态持久化 |
 
-`RagClient` 建议接口：
+`RagClient` 接口（与 TECH.md §7.1 完全对齐，包含 CreateWorkspace）：
 
 ```go
 type RagClient interface {
     Query(ctx context.Context, req RAGQueryRequest) (*RAGQueryResponse, error)
     SyncDocument(ctx context.Context, req RAGSyncRequest) (*RAGSyncResponse, error)
     DisableDocument(ctx context.Context, req RAGDisableRequest) error
+    CreateWorkspace(ctx context.Context, req RAGCreateWorkspaceRequest) (*RAGCreateWorkspaceResponse, error)
 }
 ```
 
-核心请求结构：
-
-```go
-type RAGQueryRequest struct {
-    WorkspaceSlug string
-    Question      string
-    SessionID     string
-    TopK          int
-}
-
-type RAGQueryResponse struct {
-    Answer     string
-    Sources    []RAGSource
-    Confidence float64
-    ChatID      string
-    DurationMS  int64
-}
-
-type RAGSource struct {
-    DocName      string
-    ChunkContent string
-    Score        float64
-}
-```
-
-### 6.2 前端
+### 6.2 前端（全部已实现 ✅）
 
 | 文件 | 作用 |
 | --- | --- |

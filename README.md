@@ -11,7 +11,7 @@
 | M3 知识库管理与 AI 服务 | ✅ 完成 | 知识库 CRUD、审核发布流程、AnythingLLM 适配器、RagClient |
 | M4 智能问答与申告处理 | ✅ 完成 | RAG 集成、问答 API、申告状态机、站内消息、StorageClient |
 | M5 数据看板与日志审计 | ✅ 完成 | 看板统计、审计日志、系统配置、模型/Embedding 配置页面 |
-| M6 联调测试与文档完善 | ✅ 完成 | 集成测试(17 用例)、演示数据、Docker 6 服务编排、README |
+| M6 联调测试与文档完善 | ✅ 完成 | 集成测试(17 用例)、演示数据、Docker 7 服务编排、README |
 
 **全部 38 个任务已完成。**
 
@@ -34,18 +34,33 @@
 
 ## 快速启动
 
-> **第一次部署？** 按顺序执行下面 4 个步骤：基础服务 → 模型下载(可选) → API Key 初始化 → 演示数据。
+> **一键部署：** `make up` 即可启动全部服务，**AnythingLLM API Key 全自动初始化**，无需手动操作浏览器。
 
 ### 前置条件
 
 - **Docker Desktop** 4.x+（含 Docker Compose v2）
+- **Git Bash**（Windows）/ 任意终端（Linux/macOS）
 - **磁盘空间** ≥ 20 GB（含镜像和模型）
 - **内存** ≥ 16 GB（若启用 vLLM）
 - **GPU**（可选）：NVIDIA GPU + nvidia-container-toolkit（vLLM 推理需要）
 
+### 服务端口
+
+| 端口 | 服务 | 说明 |
+|------|------|------|
+| `5173` | OpsMind Web 前端 | 用户入口（Nginx 反向代理到 :80） |
+| `8080` | OpsMind Go 后端 | REST API（Gin） |
+| `3001` | AnythingLLM | RAG 管理页面（初始化/排障用，日常可关闭） |
+| `5432` | PostgreSQL | 业务数据库 + pgvector 向量库 |
+| `9000` | MinIO S3 API | 对象存储（申告附件、知识文档原件） |
+| `9001` | MinIO Console | MinIO Web 管理后台 |
+| `8000` | vLLM（可选） | OpenAI 兼容 API（仅 `--profile ai-local` 时启动） |
+
+> **注意：** vLLM 端口不映射到宿主机，仅在 Docker 内网通过 `http://vllm:8000/v1` 访问。
+
 ---
 
-### 第一步：启动基础服务
+### 第一步：一键启动
 
 ```bash
 # 克隆项目
@@ -56,17 +71,21 @@ cd OpsMind
 cp .env.example .env
 # 编辑 .env，至少设置：
 #   OPSMIND_JWT_SECRET=<随机字符串 32 位以上>
+#   LLM_BASE_URL=<你的 LLM 服务地址>
+#   LLM_API_KEY=<你的 LLM API Key>
 # 其余配置使用默认值即可
 
-# 构建并启动基础服务（不含 vLLM/AnythingLLM 管理页面）
-docker compose up -d --build
+# 一键启动（含 AnythingLLM API Key 自动初始化）
+make up
 ```
+
+`opsmind-setup` 服务会自动完成 AnythingLLM 初始化——**直写 SQLite 生成 API Key**，写入共享卷供后端读取。无需打开浏览器。
 
 等待约 1-2 分钟，验证服务状态：
 
 ```bash
 docker compose ps
-# 期望输出：opsmind-postgres (healthy)、opsmind-minio、opsmind-server、opsmind-web 均为 Up
+# 期望输出：全部服务 Up，opsmind-postgres (healthy)、opsmind-anythingllm (healthy)
 ```
 
 访问验证：
@@ -76,6 +95,8 @@ docker compose ps
 | http://localhost:5173 | 前端页面 |
 | http://localhost:8080 | 后端 API |
 | http://localhost:9001 | MinIO 管理控制台（minioadmin / minioadmin） |
+
+> **手动兜底：** 如果自动初始化意外失败，运行 `make setup` 通过浏览器引导完成。
 
 ---
 
@@ -166,37 +187,7 @@ docker compose up -d --build
 
 ---
 
-### 第三步：初始化 AnythingLLM API Key
-
-AnythingLLM 首次启动后需要手动创建 API Key：
-
-```bash
-# 1. 编辑 docker-compose.yml，取消 anythingllm 服务 ports 的注释
-#    将 # ports: 和 #   - "3001:3001" 两行的 # 删除
-#    保存后执行：
-docker compose up -d anythingllm
-
-# 2. 浏览器打开 http://localhost:3001，完成初始化向导
-#    - 设置管理员账号
-#    - LLM 偏好选 "Generic OpenAI"（vLLM 兼容 OpenAI API）
-#    - Embedding 偏好选 "Generic OpenAI Embedding"
-#    - 向量数据库选 "LanceDB"（默认）
-
-# 3. 进入 Settings → API Keys → "Create API Key"
-#    复制 Key，写入项目根目录 .env：
-#    ANYTHINGLLM_API_KEY=sk-xxxxxxxxxxxxxxxx
-
-# 4. 创建知识库工作区（API 方式或管理页面均可）：
-#    管理页面 → Workspaces → New Workspace
-#    slug 设为 "opsmind-it-ops"（与 config.yaml 一致）
-
-# 5. 关闭管理端口（注释掉 ports）并重启
-docker compose up -d --build
-```
-
----
-
-### 第四步：加载演示数据
+### 第三步：加载演示数据
 
 ```bash
 # 加载预设角色、用户、知识库、申告等
@@ -289,7 +280,7 @@ OpsMind/
 │       ├── utils/                     # 工具函数（request/auth）
 │       └── styles/                    # Linear Design 暗色主题
 │
-├── docker-compose.yml                 # Docker 6 服务编排
+├── docker-compose.yml                 # Docker 7 服务编排
 ├── .env.example                       # 环境变量模板
 ├── Makefile                           # 构建和开发命令
 └── README.md                          # 本文件

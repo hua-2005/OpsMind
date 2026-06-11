@@ -10,7 +10,7 @@
 
 **关联文档：**
 - [PRD.md](PRD.md) — 产品需求文档 v2.2
-- [TECH.md](TECH.md) — 技术架构文档 v1.1
+- [TECH.md](TECH.md) — 技术架构文档 v1.3
 - [ANYTHINGLLM_AI_INTEGRATION.md](ANYTHINGLLM_AI_INTEGRATION.md) — AnythingLLM 集成方案 v1.1
 - [prompts/DESIGN-linear.app.md](prompts/DESIGN-linear.app.md) — Linear Design 系统约束
 
@@ -29,15 +29,13 @@
 | `internal/config/config.yaml` | 默认配置文件 | T02 |
 | `internal/database/database.go` | GORM 数据库连接初始化 | T03 |
 | `internal/database/migrate.go` | 自动迁移（全部 GORM 模型） | T04 |
-| `internal/model/user.go` | User / UserRole 数据模型 | T04 |
-| `internal/model/role.go` | Role / RoleMenu 数据模型 | T04 |
-| `internal/model/menu.go` | Menu 数据模型 | T04 |
+| `internal/model/user.go` | User / Role / Menu / UserRole / RoleMenu 数据模型 | T04 |
 | `internal/model/ticket.go` | Ticket / TicketRecord 数据模型 | T04 |
 | `internal/model/knowledge.go` | KnowledgeBase / KnowledgeArticle / KnowledgeChunk 数据模型 | T04 |
-| `internal/model/embedding_config.go` | EmbeddingConfig 数据模型 | T04 |
+| `internal/model/embedding.go` | EmbeddingConfig 数据模型 | T04 |
 | `internal/model/chat.go` | ChatSession / ChatMessage 数据模型 | T04 |
-| `internal/model/audit_log.go` | AuditLog 数据模型 | T04 |
-| `internal/model/system_config.go` | SystemConfig 数据模型 | T04 |
+| `internal/model/audit.go` | AuditLog 数据模型 | T04 |
+| `internal/model/system.go` | SystemConfig 数据模型 | T04 |
 | `internal/model/message.go` | Message 数据模型 | T04 |
 | `pkg/response/response.go` | 统一 JSON 响应格式封装 | T05 |
 | `pkg/errcode/errcode.go` | 全局错误码定义（10001-99999） | T05 |
@@ -294,14 +292,12 @@
 
 **Files:**
 - Create: `server/internal/model/user.go`
-- Create: `server/internal/model/role.go`
-- Create: `server/internal/model/menu.go`
 - Create: `server/internal/model/ticket.go`
 - Create: `server/internal/model/knowledge.go`
-- Create: `server/internal/model/embedding_config.go`
+- Create: `server/internal/model/embedding.go`
 - Create: `server/internal/model/chat.go`
-- Create: `server/internal/model/audit_log.go`
-- Create: `server/internal/model/system_config.go`
+- Create: `server/internal/model/audit.go`
+- Create: `server/internal/model/system.go`
 - Create: `server/internal/model/message.go`
 - Create: `server/internal/database/migrate.go`
 
@@ -309,15 +305,13 @@
 
 每个模型文件定义对应 TECH.md §4.2 中的表结构。关键要求：
 
-- **user.go** — `User` 结构体：ID、Username、PasswordHash、RealName、Phone、Email、Status（1=正常,2=冻结）、FirstLogin（bool）、CreatedAt、UpdatedAt。`UserRole` 中间表：UserID、RoleID。
-- **role.go** — `Role` 结构体：ID、Name、Description、Permissions（JSONB）、CreatedAt。`RoleMenu` 中间表：RoleID、MenuID。
-- **menu.go** — `Menu` 结构体：ID、Name、Path、Icon、ParentID、SortOrder、Type（catalog/menu/button）。
+- **user.go** — `User` 结构体：ID、Username、PasswordHash、RealName、Phone、Email、Status（1=正常,2=冻结）、FirstLogin（bool）、CreatedAt、UpdatedAt。同时包含 `Role`（ID、Name、Description、Permissions JSONB、CreatedAt）、`Menu`（ID、Name、Path、Icon、ParentID、SortOrder、Type）、`UserRole` 中间表（UserID、RoleID）、`RoleMenu` 中间表（RoleID、MenuID）。
 - **ticket.go** — `Ticket` 结构体：全部字段与 TECH.md tickets 表对齐，含 SupplementCount、Source、ChatContext（JSONB）。`TicketRecord` 结构体：含 Detail（JSONB）字段。
 - **knowledge.go** — `KnowledgeBase` 含 RagWorkspaceSlug。`KnowledgeArticle` 含 RagDocumentLocation。`KnowledgeChunk` 含 SyncStatus（varchar(16)，值为 pending/synced/failed/disabled）、SyncError。
-- **embedding_config.go** — `EmbeddingConfig`：含 ModelType（1=API,2=本地）、LocalPath、IsDefault。
+- **embedding.go** — `EmbeddingConfig`：含 ModelType（1=API,2=本地）、LocalPath、IsDefault。
 - **chat.go** — `ChatSession` 含 Sources（JSONB）、Feedback、DurationMS。`ChatMessage` 含 Sources（JSONB）、Confidence。
-- **audit_log.go** — `AuditLog`：含 Detail（JSONB）、IPAddress。
-- **system_config.go** — `SystemConfig`：Key（唯一）、Value（JSONB）。
+- **audit.go** — `AuditLog`：含 Detail（JSONB）、IPAddress。
+- **system.go** — `SystemConfig`：Key（唯一）、Value（JSONB）。
 - **message.go** — `Message`：含 Type、RelatedType、RelatedID、IsRead。
 
 所有模型实现 `TableName()` 方法返回确切表名。时间字段使用 `time.Time`，GORM 自动管理 `created_at`/`updated_at`。
@@ -1313,7 +1307,7 @@ Bucket 规划：`opsmind-attachments`（申告附件）、`opsmind-documents`（
 **说明：**
 
 **docker-compose.yml** — 与 ANYTHINGLLM_AI_INTEGRATION.md §3.1 完全对齐：
-- 6 个服务：opsmind-server、opsmind-web、anythingllm、vllm（ai-local profile）、postgres、minio
+- 7 个服务：opsmind-server、opsmind-web、opsmind-setup（自动初始化）、anythingllm、vllm（ai-local profile）、postgres、minio
 - AnythingLLM 默认不暴露端口
 - vLLM 通过 `--profile ai-local` 启用
 - 所有服务通过 `opsmind` bridge 网络互通
@@ -1415,7 +1409,7 @@ Bucket 规划：`opsmind-attachments`（申告附件）、`opsmind-documents`（
 | §7.1 RagClient 接口 | T20 | 4 个方法 + 字段映射 |
 | §7.3 StorageClient 接口 | T27 | 3 个方法 |
 | §8.3 密码策略 | T05, T11 | 正则校验 + bcrypt |
-| §9.1 Docker Compose | T37 | 6 个服务编排 |
+| §9.1 Docker Compose | T37 | 7 个服务编排 |
 | §10.1 降级规则 | T26 | 6 种场景 |
 | §10.2 知识同步流程 | T18 | 发布/停用/重试 |
 | §10.3 后台调度器 | T30 | 自动关闭 + 消息通知 |

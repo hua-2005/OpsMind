@@ -1,8 +1,8 @@
 # 知识发布与同步流程 (Knowledge Publish Flow)
 
 > **设计来源：** TECH.md §10.2 知识同步与停用流程 + PLAN.md T18/T19
-> **对应任务：** T18（知识库 Service+Handler）、T19（Embedding 配置）、T20（RagClient 适配器）— M3 待实现
-> **实现文件：** `handler/knowledge.go` → `service/knowledge_service.go` → `repository/knowledge_repo.go` → `adapter/rag_client.go`（🔲 M3）
+> **对应任务：** T18（知识库 Service+Handler）、T19（Embedding 配置）、T20（RagClient 适配器）— ✅ 已实现
+> **实现文件：** `handler/knowledge.go` → `service/knowledge_service.go` → `repository/knowledge_repo.go` → `adapter/rag_client.go`（✅ M3）
 
 ---
 

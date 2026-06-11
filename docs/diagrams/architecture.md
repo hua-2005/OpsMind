@@ -1,6 +1,6 @@
 # 系统架构总览 (System Architecture)
 
-> **当前实现状态：** M1 ✅ / M2 ✅ — M3-M6 模块为设计态（虚线标注）
+> **当前实现状态：** M1 ✅ / M2 ✅ / M3 ✅ / M4 ✅ / M5 ✅ / M6 ✅ — 全部 38 个任务已完成
 
 ---
 
@@ -38,10 +38,13 @@ flowchart TB
         AH["AuthHandler<br/>✅ Login/Refresh/ChangePassword/Logout"]
         UH["UserHandler<br/>✅ Create/GetByID/List/Update/Freeze/Restore"]
         RH["RoleHandler<br/>✅ Create/GetByID/List/Update/Delete"]
-        CH["ChatHandler<br/>🔲 M4 待实现"]
-        TH["TicketHandler<br/>🔲 M4 待实现"]
-        KH["KnowledgeHandler<br/>🔲 M3 待实现"]
-        DH["DashboardHandler<br/>🔲 M5 待实现"]
+        CH["ChatHandler<br/>✅ 已实现"]
+        TH["TicketHandler<br/>✅ 已实现"]
+        KH["KnowledgeHandler<br/>✅ 已实现"]
+        DH["DashboardHandler<br/>✅ 已实现"]
+        CFH["ConfigHandler<br/>✅ 已实现"]
+        AUH["AuditHandler<br/>✅ 已实现"]
+        MSH["MessageHandler<br/>✅ 已实现"]
     end
 
     subgraph Service["Service 层"]
@@ -49,10 +52,13 @@ flowchart TB
         AS["AuthService<br/>✅ Login/RefreshToken/ChangePassword<br/>buildLoginResponse/buildMenuTree"]
         US["UserService<br/>✅ CRUD + Freeze/Restore"]
         RS["RoleService<br/>✅ CRUD"]
-        CS["ChatService<br/>🔲 M4"]
-        TS["TicketService<br/>🔲 M4"]
-        KS["KnowledgeService<br/>🔲 M3"]
-        DS["DashboardService<br/>🔲 M5"]
+        CS["ChatService<br/>✅ 已实现"]
+        TS["TicketService<br/>✅ 已实现"]
+        KS["KnowledgeService<br/>✅ 已实现"]
+        DS["DashboardService<br/>✅ 已实现"]
+        CfS["ConfigService<br/>✅ 已实现"]
+        MS["MessageService<br/>✅ 已实现"]
+        Sch["Scheduler<br/>✅ 已实现"]
     end
 
     subgraph Repository["Repository 层"]
@@ -60,22 +66,22 @@ flowchart TB
         URepo["UserRepo<br/>✅ User + Role + Menu + UserRole + RoleMenu"]
         RRepo["RoleRepo<br/>✅ Role CRUD"]
         CRepo["ConfigRepo<br/>✅ SystemConfig CRUD"]
-        TRepo["TicketRepo<br/>🔲 M4"]
-        KRepo["KnowledgeRepo<br/>🔲 M3"]
-        ChRepo["ChatRepo<br/>🔲 M4"]
-        ARepo["AuditRepo<br/>🔲 M5"]
-        MRepo["MessageRepo<br/>🔲 M4"]
+        TRepo["TicketRepo<br/>✅ 已实现"]
+        KRepo["KnowledgeRepo<br/>✅ 已实现"]
+        ChRepo["ChatRepo<br/>✅ 已实现"]
+        ARepo["AuditRepo<br/>✅ 已实现"]
+        MRepo["MessageRepo<br/>✅ 已实现"]
     end
 
-    subgraph Adapter["适配层 adapter/ (设计态)"]
-        Rag["RagClient<br/>🔲 M3 AnythingLLM"]
-        Storage["StorageClient<br/>🔲 M4 MinIO"]
+    subgraph Adapter["适配层 adapter/"]
+        Rag["RagClient<br/>✅ AnythingLLM"]
+        Storage["StorageClient<br/>✅ MinIO"]
     end
 
     subgraph Data["数据层 (Docker)"]
         PG[("PostgreSQL 18<br/>+ pgvector")]
-        MinIO[("MinIO S3<br/>🔲 M4")]
-        AnythingLLM[("AnythingLLM<br/>🔲 M3")]
+        MinIO[("MinIO S3<br/>✅")]
+        AnythingLLM[("AnythingLLM<br/>✅")]
     end
 
     Browser --> Router
@@ -83,10 +89,10 @@ flowchart TB
     MW --> Handler
     Handler --> Service
     Service --> Repository
-    Service -.-> Adapter
+    Service --> Adapter
     Repository --> PG
-    Adapter -.-> AnythingLLM
-    Adapter -.-> MinIO
+    Adapter --> AnythingLLM
+    Adapter --> MinIO
 
     style AH fill:#2ecc71,color:#fff
     style UH fill:#2ecc71,color:#fff

@@ -1,8 +1,8 @@
 # 申告状态机 (Ticket State Machine)
 
 > **设计来源：** TECH.md §5.3 申告状态转换表 + `model/enums.go` 状态常量
-> **对应任务：** T24（申告 Service + Handler）— M4 待实现
-> **实现文件：** `handler/ticket.go` → `service/ticket_service.go` → `repository/ticket_repo.go`（🔲 M4）
+> **对应任务：** T24（申告 Service + Handler）— ✅ 已实现
+> **实现文件：** `handler/ticket.go` → `service/ticket_service.go` → `repository/ticket_repo.go`（✅ M4）
 
 ---
 

@@ -9,15 +9,16 @@
 #   make migrate      运行数据库迁移
 #   make seed         加载演示数据
 
-.PHONY: dev build up down test migrate seed db-reset db-init db-drop clean help model-download
+.PHONY: dev build up down test migrate seed db-reset db-init db-drop clean help model-download setup
 
 # 默认目标
 help:
 	@echo "OpsMind 构建和开发命令"
 	@echo ""
+	@echo "  make setup           手动初始化 AnythingLLM API Key（自动失败时的兜底）"
 	@echo "  make dev             本地开发启动（仅启动依赖服务）"
 	@echo "  make build           构建全部 Docker 镜像"
-	@echo "  make up              启动全部服务（不含 vLLM）"
+	@echo "  make up              一键启动全部服务（含自动初始化，不含 vLLM）"
 	@echo "  make up-ai           启动含 vLLM 的完整 AI 环境"
 	@echo "  make down            停止全部服务"
 	@echo "  make test            运行全部测试"
@@ -49,9 +50,20 @@ dev:
 build:
 	docker compose build
 
-# 一键启动全部服务（不含 vLLM）
+# 一键启动全部服务（含 AnythingLLM 自动初始化，不含 vLLM）
+# opsmind-setup 服务会在首次运行时自动创建 API Key，无需手动操作
 up:
 	docker compose up -d --build
+	@echo ""
+	@echo "============================================"
+	@echo "  OpsMind 服务已启动"
+	@echo "============================================"
+	@echo "  前端:          http://localhost:5173"
+	@echo "  后端 API:      http://localhost:8080"
+	@echo "  AnythingLLM:   http://localhost:3001"
+	@echo ""
+	@echo "  如 API Key 自动初始化失败，运行: make setup"
+	@echo "============================================"
 
 # 启动含本地 vLLM 的完整 AI 环境（需要先下载模型: make model-download）
 up-ai:
@@ -118,6 +130,13 @@ model-download:
 	@echo ""
 	@echo "模型下载完成！模型文件位于 ./models/ 目录"
 	@echo "现在可以运行: make up-ai"
+
+# ===== 初始化 =====
+
+# 手动初始化 AnythingLLM（仅当 docker compose up -d 自动初始化失败时使用）
+# 自动打开浏览器引导创建 API Key，写入 .env，创建默认工作区
+setup:
+	@bash scripts/setup.sh
 
 # ===== 清理 =====
 
