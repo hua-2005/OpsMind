@@ -8,7 +8,6 @@ import (
 
 	"opsmind/internal/model"
 
-	"github.com/pgvector/pgvector-go"
 	"gorm.io/datatypes"
 )
 
@@ -70,14 +69,15 @@ func TestKnowledgeArticle_Fields(t *testing.T) {
 	}
 }
 
-// TestKnowledgeChunk_Fields 验证 KnowledgeChunk 模型字段与 TECH.md §4.2 knowledge_chunks 表定义一致
+// TestKnowledgeChunk_Fields 验证 KnowledgeChunk 模型字段与 TECH.md §4.2 knowledge_chunks 表定义一致。
+//
+// 注意：Embedding 字段已移除——RAG 检索由 AnythingLLM LanceDB 承担，
+// knowledge_chunks 表仅记录 AnythingLLM 同步状态。
 func TestKnowledgeChunk_Fields(t *testing.T) {
 	now := time.Now()
-	vec := pgvector.NewVector([]float32{0.1, 0.2, 0.3})
 	chunk := model.KnowledgeChunk{
 		ArticleID:       1,
 		Content:         "OA系统登录问题",
-		Embedding:       vec,
 		EmbeddingModel:  "text-embedding-3-small",
 		VectorDimension: 3,
 		SyncStatus:      model.ChunkSyncPending,
@@ -94,7 +94,7 @@ func TestKnowledgeChunk_Fields(t *testing.T) {
 	if chunk.VectorDimension != 3 {
 		t.Errorf("VectorDimension = %d, 期望 3", chunk.VectorDimension)
 	}
-	if chunk.Embedding.Slice()[0] != 0.1 {
-		t.Errorf("Embedding[0] = %f, 期望 0.1", chunk.Embedding.Slice()[0])
+	if chunk.EmbeddingModel != "text-embedding-3-small" {
+		t.Errorf("EmbeddingModel = %q, 期望 text-embedding-3-small", chunk.EmbeddingModel)
 	}
 }

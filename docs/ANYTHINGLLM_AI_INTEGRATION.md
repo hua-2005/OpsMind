@@ -30,7 +30,7 @@ AnythingLLM 应作为 OpsMind 的一个内部 Docker 组件集成到项目中，
 | 业务 API | OpsMind Server | 保存会话、判断置信度、处理降级、记录审计 |
 | RAG 服务 | AnythingLLM | 负责知识导入、切分、向量检索、RAG 编排、同步问答 |
 | 模型推理 | vLLM | 通过 AnythingLLM 的 `generic-openai` 提供商接入 |
-| 业务数据库 | PostgreSQL + pgvector | 保存 OpsMind 用户、申告、知识、审计和系统侧向量追溯 |
+| 业务数据库 | PostgreSQL | 保存 OpsMind 用户、申告、知识、审计数据 |
 | 对象存储 | MinIO | 保存申告附件和知识文档原件 |
 
 推荐调用链：
@@ -185,7 +185,7 @@ services:
       - ai-local
 
   postgres:
-    image: pgvector/pgvector:pg18
+    image: postgres:18
     container_name: opsmind-postgres
     environment:
       POSTGRES_DB: opsmind
@@ -757,5 +757,5 @@ docker compose exec opsmind-server sh -c "wget -qO- http://anythingllm:3001/api/
 | 问答接口 | OpsMind 对外暴露 `POST /api/v1/portal/chat-sessions` |
 | AnythingLLM 问答 | 后端内部调用 `/api/v1/workspace/{slug}/chat` |
 | MVP 输出 | 同步返回完整答案，不接 SSE |
-| 向量库 | AnythingLLM 默认 LanceDB；OpsMind pgvector 用于系统侧追溯和扩展 |
+| 向量库 | AnythingLLM 默认 LanceDB |
 

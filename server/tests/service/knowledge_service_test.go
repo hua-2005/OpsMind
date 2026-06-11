@@ -20,7 +20,6 @@ import (
 	"opsmind/internal/repository"
 	"opsmind/internal/service"
 
-	"github.com/pgvector/pgvector-go"
 	"gorm.io/gorm"
 )
 
@@ -98,15 +97,6 @@ func setupKnowledgeService(t *testing.T) (*service.KnowledgeService, *mockRagCli
 	knowledgeSvcDB.Exec("DELETE FROM embedding_configs")
 
 	return svc, mockRAG
-}
-
-// testVector 返回一个用于测试的有效 pgvector 向量。
-func testVector(dim int) pgvector.Vector {
-	vec := make([]float32, dim)
-	for i := range vec {
-		vec[i] = float32(i+1) * 0.01
-	}
-	return pgvector.NewVector(vec)
 }
 
 // createTestKB 创建测试用知识库。
@@ -597,7 +587,6 @@ func TestKnowledgeService_GetArticleDetail(t *testing.T) {
 	chunk := model.KnowledgeChunk{
 		ArticleID:       article.ID,
 		Content:         "切片内容",
-		Embedding:       testVector(768),
 		EmbeddingModel:  "test-model",
 		VectorDimension: 768,
 		SyncStatus:      "synced",

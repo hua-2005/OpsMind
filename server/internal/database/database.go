@@ -15,11 +15,10 @@ import (
 	"opsmind/internal/config"
 )
 
-// Init 初始化数据库连接并启用 pgvector 扩展。
+// Init 初始化数据库连接。
 //
-// 为什么在 Init 中启用 pgvector 而非迁移脚本：
-// pgvector 扩展是系统级对象，只需执行一次，放在连接初始化阶段
-// 可以确保每次服务启动时扩展都可用，无需额外的迁移步骤。
+// 使用 GORM 连接 PostgreSQL，配置连接池参数。
+// 不再依赖 pgvector 扩展——RAG 检索由 AnythingLLM LanceDB 承担。
 //
 // 连接池参数选择依据：
 // - MaxOpenConns=25：MVP 阶段单实例部署，25 连接足够支撑并发请求

@@ -5,7 +5,6 @@
   <img src="https://img.shields.io/badge/Vue-3.4+-4FC08D?logo=vuedotjs" alt="Vue">
   <img src="https://img.shields.io/badge/Naive_UI-2.43+-18a058?logo=naiveui" alt="Naive UI">
   <img src="https://img.shields.io/badge/PostgreSQL-18-4169E1?logo=postgresql" alt="PostgreSQL">
-  <img src="https://img.shields.io/badge/pgvector-0.7+-brightgreen" alt="pgvector">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
 
@@ -17,7 +16,7 @@
 |------|------|
 | 🤖 **智能问答** | RAG 知识增强问答，置信度判断，低置信度自动转人工申告 |
 | 🎫 **申告管理** | 完整状态机（待处理→处理中→需补充→已解决/已关闭），7 天超时自动关闭 |
-| 📚 **知识库** | CRUD + 审核发布工作流，AnythingLLM 自动同步，pgvector 向量追溯 |
+| 📚 **知识库** | CRUD + 审核发布工作流，AnythingLLM 自动同步，同步状态追踪 |
 | 👥 **用户权限** | JWT 认证 + RBAC 角色权限，菜单动态渲染，密码策略强制 |
 | 📊 **数据看板** | 实时统计卡片 + 趋势图，问答量/解决率/命中率一目了然 |
 | 📝 **审计日志** | 敏感操作全量记录，支持按操作类型/操作人/时间筛选 |
@@ -32,7 +31,7 @@
 |------|------|------|
 | 后端框架 | Go + Gin | REST API 服务，Handler→Service→Repository 三层架构 |
 | ORM | GORM | PostgreSQL 数据访问 + AutoMigrate |
-| 数据库 | PostgreSQL 18 + pgvector | 业务数据 + 系统侧向量追溯 |
+| 数据库 | PostgreSQL 18 | 业务数据 |
 | RAG 服务 | AnythingLLM | Docker 内部组件，知识检索增强生成 |
 | AI 推理 | vLLM / OpenAI / Ollama | 通过 AnythingLLM generic-openai 接入 |
 | 对象存储 | MinIO | S3-compatible，申告附件 + 知识文档 |
@@ -64,7 +63,7 @@
 | `5173` | OpsMind Web 前端 | 用户入口（Nginx 反向代理到 :80） |
 | `8080` | OpsMind Go 后端 | REST API（Gin） |
 | `3001` | AnythingLLM | RAG 管理页面（初始化/排障用，日常可关闭） |
-| `5432` | PostgreSQL | 业务数据库 + pgvector 向量库 |
+| `5432` | PostgreSQL | 业务数据库 |
 | `9000` | MinIO S3 API | 对象存储（申告附件、知识文档原件） |
 | `9001` | MinIO Console | MinIO Web 管理后台 |
 | `8000` | vLLM（可选） | OpenAI 兼容 API（仅 `--profile ai-local` 时启动） |

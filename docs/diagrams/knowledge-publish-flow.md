@@ -129,7 +129,7 @@ sequenceDiagram
         alt 已有 chunks
             KS->>KR: UpdateChunkSyncStatus(id, "synced", "")
         else 无 chunks (首次发布)
-            KS->>KR: CreateChunks([{content, embedding,<br/>  embedding_model, vector_dimension,<br/>  sync_status:"synced"}])
+            KS->>KR: CreateChunks([{content,<br/>  embedding_model, vector_dimension,<br/>  sync_status:"synced"}])
         end
     else 同步失败
         KS->>KR: UpdateChunkSyncStatus(id, "failed", syncErr.Error())

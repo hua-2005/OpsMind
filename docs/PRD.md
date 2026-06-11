@@ -237,7 +237,7 @@
 3. 管理员填写问题、答案、分类、标签和适用范围。
 4. 管理员提交审核。
 5. 审核人（知识库管理员，且不能是创建人本人）审核通过后发布知识。
-6. 系统同步知识到 AnythingLLM，并将同模型同维度的切片向量写入 pgvector。
+6. 系统同步知识到 AnythingLLM，并记录同步状态到 knowledge_chunks 表。
 
 **界面交互：**
 
@@ -474,7 +474,7 @@
 3. 审核人（非创建人）调用 `POST /api/v1/admin/knowledge-articles/{id}/review` 审核知识（通过/驳回并填写原因）。
 4. 发布人员调用 `POST /api/v1/admin/knowledge-articles/{id}/publish` 将审核通过的知识发布。
 5. 后端同步调用 AnythingLLM 适配器同步知识内容和元数据。
-6. 后端按知识库配置的 embedding 模型和维度生成或接收切片向量，并写入 pgvector。
+6. 后端按知识库配置的 embedding 模型和维度记录同步状态到 knowledge_chunks 表。
 7. 后端记录同步状态（成功/失败）和审计日志。
 8. 同步失败时，知识状态标记为"同步失败"，管理员可在后台查看错误详情并手动重试。
 
@@ -525,11 +525,11 @@
 - **网络：** 测试环境可连接互联网；企业环境应支持内网访问。
 - **后端：** Go 服务，提供 REST API。
 - **前端：** Vue 管理端与门户端。
-- **数据库：** MVP 固定采用 PostgreSQL 18，并启用 pgvector 承载系统侧知识向量存储能力。
+- **数据库：** MVP 固定采用 PostgreSQL 18，仅存储业务数据和 AnythingLLM 同步状态。
 - **RAG 服务：** AnythingLLM 作为 Docker 内部组件集成，由 `docker-compose.yml` 统一拉起。负责完整 RAG 流程，包括知识导入、切分、向量检索（内部向量库 LanceDB）、RAG 编排和问答。后端通过 `RagClient` 适配层接入，内部地址 `http://anythingllm:3001/api`。
 - **AI 推理：** vLLM 作为 Docker 内部组件，通过 AnythingLLM 的 `generic-openai` 提供商接入，OpsMind 后端不直接调用 vLLM。
-- **向量配置：** 系统管理员在系统配置中预配置可用的 embedding 模型列表（支持 API 接入和本地部署），每条配置包含模型名称、类型、API 地址或本地路径、向量维度。知识库创建时从该列表中选择模型和维度，同一知识库内所有知识切片必须一致。embedding 模型配置用于 OpsMind 系统侧 pgvector 向量生成，AnythingLLM 内部的 embedding 配置独立管理。
-- **向量存储边界：** AnythingLLM LanceDB 负责 RAG 检索，PostgreSQL pgvector 用于 OpsMind 系统侧向量追溯和后续原生检索扩展。两者独立，互不依赖。
+- **向量配置：** 系统管理员在系统配置中预配置可用的 embedding 模型列表（支持 API 接入和本地部署），每条配置包含模型名称、类型、API 地址或本地路径、向量维度。知识库创建时从该列表中选择模型和维度，同一知识库内所有知识切片必须一致。embedding 模型配置用于知识库维度和同步策略管理，AnythingLLM 内部的 embedding 配置独立管理。
+- **向量存储边界：** AnythingLLM LanceDB 负责 RAG 检索和向量存储。PostgreSQL 仅存储业务数据和 AnythingLLM 同步状态，不参与向量检索。
 - **对象存储：** MVP 采用 MinIO，并通过 S3-compatible 适配层管理申告附件和知识文档原件。
 
 ### 设计和实现约束
@@ -537,8 +537,8 @@
 - 后端优先使用 Go，前端优先使用 Vue。
 - MVP AnythingLLM 作为 Docker 内部组件集成，OpsMind 后端通过 `RagClient` 适配层接入，内部地址 `http://anythingllm:3001/api`。
 - MVP vLLM 通过 AnythingLLM 的 `generic-openai` 提供商接入，OpsMind 后端不直接调用 vLLM。
-- MVP RAG 能力由 AnythingLLM 承担（知识导入、切分、向量检索、RAG 编排），内部向量库使用 LanceDB。PostgreSQL pgvector 仅用于 OpsMind 系统侧向量存储和追溯。
-- MVP 每个知识库必须绑定一个 embedding 模型和一个向量维度（用于 pgvector 侧）；发布、切片、同步时禁止写入与知识库配置不一致的向量。
+- MVP RAG 能力由 AnythingLLM 承担（知识导入、切分、向量检索、RAG 编排），内部向量库使用 LanceDB。PostgreSQL 仅存储业务数据和 AnythingLLM 同步状态。
+- MVP 每个知识库必须绑定一个 embedding 模型和一个向量维度；发布、切片、同步时必须与知识库配置一致。
 - MVP 对象存储固定通过 S3-compatible 适配层接入 MinIO。
 - MVP 运维账号管理只做系统内本地模拟，不对接真实企业账号中心。
 - MVP 知识同步采用同步处理，NATS JetStream 异步同步作为后续增强。
@@ -551,7 +551,7 @@
 - 企业可提供基础运维 FAQ、处理方案和账号管理规则。
 - vLLM OpenAI-compatible 服务可用，或可部署在独立模型节点上。
 - AnythingLLM 作为 Docker 内部组件部署，通过 `docker-compose.yml` 统一拉起，后端通过内部地址 `http://anythingllm:3001/api` 访问。
-- PostgreSQL 已启用 pgvector 扩展，用于 MVP 系统侧知识向量存储和后续原生检索扩展。
+- PostgreSQL 仅存储业务数据和 AnythingLLM 同步状态，不参与向量检索。
 - embedding 模型和维度由系统管理员在系统配置中预配置；知识库创建时从预配置列表中选择。
 - MinIO 服务可用，并提供 S3-compatible API。
 - 系统初期以单企业内部使用为主，不考虑复杂多租户隔离。
@@ -594,7 +594,7 @@
 
 - RAG 服务通过 AnythingLLM 适配层接入（Docker 内部组件），后续可在不改业务接口的前提下替换为自建 RAG 方案。
 - vLLM 通过 AnythingLLM `generic-openai` 提供商接入，后续替换模型只需修改 AnythingLLM 配置，不改 OpsMind 代码。
-- pgvector 只承担系统侧向量存储和扩展检索基础，RAG 检索走 AnythingLLM LanceDB。
+- RAG 检索全部由 AnythingLLM LanceDB 承担，不依赖 pgvector。
 - 知识库配置应支持选择 embedding 模型和向量维度，并保证同一知识库内向量模型和维度一致。
 - 工单状态机应保留扩展空间，支持后续分派、升级、SLA 等能力。
 - 菜单和权限应支持新增模块。
@@ -626,7 +626,7 @@
 - 运维人员可以在后台处理申告并登记回访结果。
 - 管理员可以维护本地模拟运维账号并冻结账号。
 - 知识库管理员可以维护 FAQ 并发布到问答流程。
-- 知识发布后可以完成 AnythingLLM 同步状态记录，系统侧 pgvector 向量满足同知识库同模型同维度约束，失败时可查看错误信息并手动重试。
+- 知识发布后可以完成 AnythingLLM 同步状态记录，满足同知识库同模型同维度约束，失败时可查看错误信息并手动重试。
 - 系统具备登录、角色权限、接口鉴权和基础审计日志。
 - 文档包含业务流程、API 数据流、项目结构和启动说明。
 
@@ -659,7 +659,7 @@
 ### 待澄清项
 
 - 本地模型实际推理性能需要在目标硬件（4C8GB）上验证，可能影响模型选型。
-- AnythingLLM 与 pgvector 的协同边界需要明确：哪些检索由 AnythingLLM 完成，哪些由 pgvector 原生检索承担。
+- AnythingLLM 作为唯一 RAG 检索入口的设计已明确，向量检索全部由 AnythingLLM LanceDB 承担。
 - embedding 模型的可选范围（API 接入的模型提供商、本地可部署的模型）需要在部署前确定。
 - 申告附件上传的文件类型和大小限制需要明确。
 - 站内消息的具体实现方式（数据库轮询/WebSocket/SSE）需要在 M1 设计阶段确认。

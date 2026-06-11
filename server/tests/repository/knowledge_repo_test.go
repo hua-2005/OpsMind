@@ -16,7 +16,6 @@ import (
 	"opsmind/internal/model"
 	"opsmind/internal/repository"
 
-	"github.com/pgvector/pgvector-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/datatypes"
@@ -41,7 +40,7 @@ func setupKnowledgeTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("初始化数据库失败: %v", err)
 	}
 
-	// 按依赖顺序创建表
+	// 按依赖顺序创建表（knowledge_chunks 不再包含 embedding vector 列——RAG 检索由 AnythingLLM LanceDB 承担）
 	db.Exec(`CREATE TABLE IF NOT EXISTS knowledge_bases (
 		id BIGSERIAL PRIMARY KEY,
 		name VARCHAR(128) NOT NULL,
@@ -75,7 +74,6 @@ func setupKnowledgeTestDB(t *testing.T) *gorm.DB {
 		id BIGSERIAL PRIMARY KEY,
 		article_id BIGINT NOT NULL,
 		content TEXT NOT NULL,
-		embedding vector,
 		embedding_model VARCHAR(128) NOT NULL DEFAULT '',
 		vector_dimension INTEGER NOT NULL DEFAULT 0,
 		sync_status VARCHAR(16) NOT NULL DEFAULT 'pending',
@@ -106,17 +104,6 @@ func cleanKnowledgeTables(t *testing.T, db *gorm.DB) {
 	db.Exec("DELETE FROM knowledge_articles")
 	db.Exec("DELETE FROM knowledge_bases")
 	db.Exec("DELETE FROM embedding_configs")
-}
-
-// testVector 返回一个用于测试的有效 pgvector 向量。
-//
-// pgvector 要求向量至少 1 维，空切片会被 PostgreSQL 拒绝。
-func testVector(dim int) pgvector.Vector {
-	vec := make([]float32, dim)
-	for i := range vec {
-		vec[i] = float32(i+1) * 0.01
-	}
-	return pgvector.NewVector(vec)
 }
 
 // =============================================================================
@@ -491,7 +478,6 @@ func TestKnowledgeRepo_CreateChunks(t *testing.T) {
 		{
 			ArticleID:       1,
 			Content:         "切片内容1",
-			Embedding:       testVector(1536),
 			EmbeddingModel:  "text-embedding-3-small",
 			VectorDimension: 1536,
 			SyncStatus:      "pending",
@@ -500,7 +486,6 @@ func TestKnowledgeRepo_CreateChunks(t *testing.T) {
 		{
 			ArticleID:       1,
 			Content:         "切片内容2",
-			Embedding:       testVector(1536),
 			EmbeddingModel:  "text-embedding-3-small",
 			VectorDimension: 1536,
 			SyncStatus:      "pending",
@@ -544,7 +529,6 @@ func TestKnowledgeRepo_UpdateChunkSyncStatus(t *testing.T) {
 		{
 			ArticleID:       100,
 			Content:         "待同步内容",
-			Embedding:       testVector(768),
 			EmbeddingModel:  "test-model",
 			VectorDimension: 768,
 			SyncStatus:      "pending",
@@ -553,7 +537,6 @@ func TestKnowledgeRepo_UpdateChunkSyncStatus(t *testing.T) {
 		{
 			ArticleID:       100,
 			Content:         "待同步内容2",
-			Embedding:       testVector(768),
 			EmbeddingModel:  "test-model",
 			VectorDimension: 768,
 			SyncStatus:      "pending",
@@ -583,7 +566,6 @@ func TestKnowledgeRepo_UpdateChunkSyncStatus_WithError(t *testing.T) {
 	chunk := model.KnowledgeChunk{
 		ArticleID:       200,
 		Content:         "同步失败内容",
-		Embedding:       testVector(768),
 		EmbeddingModel:  "test-model",
 		VectorDimension: 768,
 		SyncStatus:      "pending",
@@ -611,7 +593,6 @@ func TestKnowledgeRepo_UpdateChunkStatusByArticleID(t *testing.T) {
 		{
 			ArticleID:       300,
 			Content:         "批量更新1",
-			Embedding:       testVector(768),
 			EmbeddingModel:  "test-model",
 			VectorDimension: 768,
 			SyncStatus:      "synced",
@@ -620,7 +601,6 @@ func TestKnowledgeRepo_UpdateChunkStatusByArticleID(t *testing.T) {
 		{
 			ArticleID:       300,
 			Content:         "批量更新2",
-			Embedding:       testVector(768),
 			EmbeddingModel:  "test-model",
 			VectorDimension: 768,
 			SyncStatus:      "synced",

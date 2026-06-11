@@ -40,26 +40,6 @@ func TestInit_Connection(t *testing.T) {
 	}
 }
 
-func TestInit_PgvectorExtension(t *testing.T) {
-	db, err := database.Init(testDBConfig())
-	if err != nil {
-		t.Fatalf("Init() 失败: %v", err)
-	}
-
-	sqlDB, _ := db.DB()
-	defer sqlDB.Close()
-
-	// 验证 pgvector 扩展已启用
-	var extName string
-	err = sqlDB.QueryRow("SELECT extname FROM pg_extension WHERE extname = 'vector'").Scan(&extName)
-	if err != nil {
-		t.Fatalf("pgvector 扩展未启用: %v", err)
-	}
-	if extName != "vector" {
-		t.Errorf("扩展名 = %q, 期望 vector", extName)
-	}
-}
-
 func TestInit_ConnectionPool(t *testing.T) {
 	db, err := database.Init(testDBConfig())
 	if err != nil {

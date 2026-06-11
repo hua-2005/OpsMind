@@ -4,9 +4,9 @@
 
 **Goal:** 按 6 个里程碑交付完整的运维数字员工系统，覆盖后端 Go + Gin 服务、Vue 3 前端、AnythingLLM RAG 集成、Docker Compose 编排。
 
-**Architecture:** 单体分层架构（Modular Monolith），Handler → Service → Repository 三层分离。AnythingLLM 作为 Docker 内部组件通过 `RagClient` 适配层接入，vLLM 通过 AnythingLLM `generic-openai` 提供商调用。PostgreSQL 18 + pgvector 存储业务数据和系统侧向量追溯，AnythingLLM LanceDB 负责 RAG 检索。
+**Architecture:** 单体分层架构（Modular Monolith），Handler → Service → Repository 三层分离。AnythingLLM 作为 Docker 内部组件通过 `RagClient` 适配层接入，vLLM 通过 AnythingLLM `generic-openai` 提供商调用。PostgreSQL 18 存储业务数据和 AnythingLLM 同步状态，AnythingLLM LanceDB 负责 RAG 检索。
 
-**Tech Stack:** Go 1.22+ / Gin 1.9+ / GORM v1.25+ / PostgreSQL 18 / pgvector 0.7+ / Vue 3.4+ / Radix Vue 1.9+ / Pinia 2.1+ / AnythingLLM / vLLM / MinIO / JWT (golang-jwt v5)
+**Tech Stack:** Go 1.22+ / Gin 1.9+ / GORM v1.25+ / PostgreSQL 18 / Vue 3.4+ / Radix Vue 1.9+ / Pinia 2.1+ / AnythingLLM / vLLM / MinIO / JWT (golang-jwt v5)
 
 **关联文档：**
 - [PRD.md](PRD.md) — 产品需求文档 v2.2
@@ -224,7 +224,6 @@
 - `github.com/golang-jwt/jwt/v5` — JWT
 - `github.com/spf13/viper` — 配置管理
 - `github.com/minio/minio-go/v7` — MinIO 客户端
-- `github.com/pgvector/pgvector-go` — pgvector 向量类型
 - `golang.org/x/crypto` — bcrypt
 
 `cmd/main.go` 已包含完整的初始化流程（T11 完成后补充了 DB/Repo/Service/Handler/Router 全链路初始化）。
@@ -277,14 +276,13 @@
 `database.go` 提供 `Init(cfg config.DatabaseConfig) (*gorm.DB, error)` 函数：
 - 使用 `gorm.io/driver/postgres` 构建 DSN
 - 配置连接池：`MaxOpenConns=25`、`MaxIdleConns=10`、`ConnMaxLifetime=5min`
-- 启用 `pgvector` 扩展：执行 `CREATE EXTENSION IF NOT EXISTS vector`
 - 返回 `*gorm.DB` 实例
 
 `database_test.go` 验证：
 - 使用测试数据库配置建立连接
-- 验证 `pgvector` 扩展已启用（查询 `pg_extension`）
+- 验证连接池配置（MaxOpenConns=25）
 
-**Verification:** 连接本地 PostgreSQL 成功，pgvector 扩展可用。
+**Verification:** 连接本地 PostgreSQL 成功。
 
 ---
 
@@ -742,7 +740,7 @@
 - `UpdateArticle(id int64, req UpdateArticleRequest) error` — 仅草稿/驳回状态可编辑
 - `SubmitReview(id int64) error` — 草稿→待审核（status=2）
 - `Review(id int64, reviewerID int64, req ReviewRequest) error` — 校验审核人≠创建人；通过→status=3；驳回→status=5+review_comment
-- `Publish(id int64, publisherID int64) error` — 调用 `RagClient.SyncDocument` 同步到 AnythingLLM + 生成向量写入 pgvector + 更新 sync_status + 写审计日志
+- `Publish(id int64, publisherID int64) error` — 调用 `RagClient.SyncDocument` 同步到 AnythingLLM + 更新 sync_status + 写审计日志
 - `Disable(id int64) error` — 调用 `RagClient.DisableDocument` + 更新 sync_status='disabled' + 写审计日志
 - `RetrySync(id int64) error` — 重新执行 Publish 逻辑
 - `ListArticles(kbID int64, status int, page, pageSize int) (*ArticleListResponse, error)`
