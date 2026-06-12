@@ -145,16 +145,16 @@ func (s *DashboardService) GetTrends(req request.TrendRequest) (*response.TrendR
 	}
 
 	var ticketCounts []dailyCount
-	// TODO: .Scan() 错误被丢弃 — SQL 失败时静默返回空数据。
-	// 应改为 if err := s.db.Raw(...).Scan(&ticketCounts).Error; err != nil { return nil, err }
-	s.db.Raw(
+	if err := s.db.Raw(
 		`SELECT TO_CHAR(created_at::date, 'YYYY-MM-DD') AS date, COUNT(*) AS count
 		 FROM tickets
 		 WHERE created_at::date >= ?::date AND created_at::date <= ?::date
 		 GROUP BY created_at::date
 		 ORDER BY created_at::date`,
 		req.StartDate, req.EndDate,
-	).Scan(&ticketCounts)
+	).Scan(&ticketCounts).Error; err != nil {
+		return nil, fmt.Errorf("查询每日申告数失败: %w", err)
+	}
 
 	// 合并申告数据到结果
 	ticketMap := make(map[string]int64, len(ticketCounts))
@@ -169,15 +169,16 @@ func (s *DashboardService) GetTrends(req request.TrendRequest) (*response.TrendR
 
 	// 查询每日问答数
 	var chatCounts []dailyCount
-	// TODO: .Scan() 错误被丢弃 — 同上。
-	s.db.Raw(
+	if err := s.db.Raw(
 		`SELECT TO_CHAR(created_at::date, 'YYYY-MM-DD') AS date, COUNT(*) AS count
 		 FROM chat_sessions
 		 WHERE created_at::date >= ?::date AND created_at::date <= ?::date
 		 GROUP BY created_at::date
 		 ORDER BY created_at::date`,
 		req.StartDate, req.EndDate,
-	).Scan(&chatCounts)
+	).Scan(&chatCounts).Error; err != nil {
+		return nil, fmt.Errorf("查询每日问答数失败: %w", err)
+	}
 
 	// 合并问答数据到结果
 	chatMap := make(map[string]int64, len(chatCounts))

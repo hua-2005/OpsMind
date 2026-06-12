@@ -42,6 +42,7 @@ func NewEmbedder(client adapter.EmbeddingClient, batchSize int) *Embedder {
 // 返回的向量列表顺序与输入 texts 一致。
 // 如果某批次调用失败，会跳过该批次继续处理后续批次，
 // 最终返回所有成功批次的向量合并结果（不报错）。
+// 当全部批次失败时返回 error，调用方据此降级处理。
 //
 // 空输入返回空向量列表且 dimension=0。
 func (e *Embedder) Embed(ctx context.Context, texts []string) ([][]float32, int, error) {
@@ -68,8 +69,7 @@ func (e *Embedder) Embed(ctx context.Context, texts []string) ([][]float32, int,
 		})
 		if err != nil {
 			failed += len(batch)
-			// TODO: 部分批次失败时静默跳过，调用方无法知道哪些文本的 embedding 丢失。
-			// 应返回失败索引列表或允许调用方配置「失败即中止」策略。
+			// 部分批次失败时跳过，全部失败时返回 error
 			continue
 		}
 

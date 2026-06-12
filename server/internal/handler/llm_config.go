@@ -69,7 +69,7 @@ func (h *LLMConfigHandler) ListConfigs(c *gin.Context) {
 	configs, err := h.svc.ListConfigs()
 	if err != nil {
 		// TODO: err.Error() 泄露内部错误 — 应使用 handleServiceError(c, err)。
-		response.Error(c, errcode.ErrUnknown, "查询 LLM 配置失败: "+err.Error())
+		handleServiceError(c, err)
 		return
 	}
 	response.Success(c, configs)

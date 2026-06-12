@@ -14,8 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Logger 返回请求日志中间件（输出到 stdout）
-// TODO: Logger() 是 LoggerWithWriter(nil) 的薄封装 — 可内联默认逻辑或移除 LoggerWithWriter。
+// Logger 返回请求日志中间件（输出到 stdout）。
 func Logger() gin.HandlerFunc {
 	return LoggerWithWriter(nil)
 }
@@ -47,8 +46,12 @@ func LoggerWithWriter(writer io.Writer) gin.HandlerFunc {
 		}
 
 		// 输出 JSON 格式日志
-		// TODO: json.Marshal 错误被静默丢弃 — 若 logEntry 含不可序列化值将静默丢失日志。
-		jsonBytes, _ := json.Marshal(logEntry)
+		jsonBytes, err := json.Marshal(logEntry)
+		if err != nil {
+			// 序列化失败时输出错误信息，避免日志静默丢失
+			fmt.Fprintf(writer, "{\"error\":\"日志序列化失败: %v\"}\n", err)
+			return
+		}
 		fmt.Fprintln(writer, string(jsonBytes))
 	}
 }

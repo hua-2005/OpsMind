@@ -80,17 +80,17 @@ func NewProcessor(parser *DocParser, chunker *Chunker, embedder *Embedder, store
 // Submit 提交处理任务（非阻塞）。
 //
 // 任务进入缓冲队列后立即返回，不等待处理完成。
-func (p *Processor) Submit(task ProcessTask) {
+// 队列满时返回 error，调用方可据此重试或向客户端返回错误。
+func (p *Processor) Submit(task ProcessTask) error {
 	select {
 	case p.taskCh <- task:
+		return nil
 	default:
-		// 队列满时丢弃（生产环境应由调用方重试）
-		// TODO: Submit 不应静默丢弃任务——调用方无法区分「提交成功」和「队列满丢弃」。
-		// 应返回 error 或改用阻塞发送 + context 超时。
-		// 当前 OnStatusChange 回调设置了 failed 状态，但 UploadDocuments 的 HTTP 响应已 200 返回。
+		// 队列满时通知回调并返回错误，调用方可据此响应
 		if task.OnStatusChange != nil {
 			task.OnStatusChange(task.ArticleID, "failed", "处理队列已满")
 		}
+		return fmt.Errorf("处理队列已满")
 	}
 }
 

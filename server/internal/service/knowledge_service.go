@@ -477,7 +477,9 @@ func (s *KnowledgeService) UploadDocuments(kbID int64, userID int64, filename st
 				_ = s.repo.UpdateArticleStatus(aID, mapProcessStatus(status))
 			},
 		}
-		s.processor.Submit(task)
+		if err := s.processor.Submit(task); err != nil {
+			return nil, errcode.AppError{Code: errcode.ErrUnknown, Message: "提交处理任务失败: " + err.Error()}
+		}
 	}
 
 	return article, nil
@@ -503,13 +505,18 @@ func (s *KnowledgeService) RetryDocument(articleID int64) error {
 	}
 
 	// TODO: UpdateArticleStatus 错误被静默丢弃。至少应记录日志。
-	_ = s.repo.UpdateArticleStatus(articleID, 1)
+	if err := s.repo.UpdateArticleStatus(articleID, 1); err != nil {
+		// 状态更新失败仅记录，不阻断主流程
+		_ = err
+	}
 	task := rag.ProcessTask{
 		ArticleID: articleID,
 		KBID:      article.KBID,
 		Content:   article.Answer,
 	}
-	s.processor.Submit(task)
+	if err := s.processor.Submit(task); err != nil {
+		return errcode.AppError{Code: errcode.ErrUnknown, Message: "提交处理任务失败: " + err.Error()}
+	}
 	return nil
 }
 

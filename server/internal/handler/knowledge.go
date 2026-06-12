@@ -86,7 +86,7 @@ func (h *KnowledgeHandler) ListKBs(c *gin.Context) {
 	kbs, err := h.svc.ListKBs()
 	if err != nil {
 		// TODO: err.Error() 泄露内部错误 — 应使用 handleServiceError(c, err)。
-		response.Error(c, errcode.ErrUnknown, err.Error())
+		handleServiceError(c, err)
 		return
 	}
 
@@ -336,7 +336,7 @@ func (h *KnowledgeHandler) UploadDocuments(c *gin.Context) {
 	src, err := file.Open()
 	if err != nil {
 		// TODO: err.Error() 泄露内部错误 — 应使用 handleServiceError(c, err)。
-		response.Error(c, errcode.ErrUnknown, "读取文件失败: "+err.Error())
+		handleServiceError(c, err)
 		return
 	}
 	defer src.Close()

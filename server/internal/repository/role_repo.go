@@ -29,9 +29,26 @@ func (r *RoleRepo) Create(role *model.Role) error {
 func (r *RoleRepo) GetByID(id int64) (*model.Role, error) {
 	var role model.Role
 	err := r.db.First(&role, id).Error
-	// TODO: 返回非 nil 指针 + error 的模式不安全——调用方可能检查 role != nil 而非 err != nil，
-	// 拿到零值 Role{} 继续执行。其他 Repo (UserRepo) 正确返回 nil, err，应统一。
-	return &role, err
+	if err != nil {
+		return nil, err
+	}
+	return &role, nil
+}
+
+// ExistsByName 检查角色名是否已存在。
+//
+// 用于 Service 层唯一性校验，避免绕过 Repository 直接操作 DB。
+// excludeID > 0 时排除自身（用于修改场景）。
+func (r *RoleRepo) ExistsByName(name string, excludeID int64) (bool, error) {
+	var count int64
+	query := r.db.Model(&model.Role{}).Where("name = ?", name)
+	if excludeID > 0 {
+		query = query.Where("id != ?", excludeID)
+	}
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 // List 查询角色列表（分页）。
