@@ -192,7 +192,7 @@ func TestChatIntegration_FullFlow(t *testing.T) {
 	assert.NotEmpty(t, createResp.Data.Answer, "应返回兜底回答")
 	assert.True(t, createResp.Data.CanSubmitTicket, "v1 占位实现中 CanSubmitTicket 应为 true")
 	assert.Nil(t, createResp.Data.Sources, "v1 占位实现不返回知识来源")
-	assert.GreaterOrEqual(t, createResp.Data.DurationMS, int64(0), "DurationMS 应 >= 0")
+	assert.GreaterOrEqual(t, createResp.Data.DurationMS, 0, "DurationMS 应 >= 0")
 	t.Logf("✅ 步骤1: 问答创建成功，answer='%s'，conf=%.2f",
 		createResp.Data.Answer, createResp.Data.Confidence)
 
@@ -223,15 +223,12 @@ func TestChatIntegration_FullFlow(t *testing.T) {
 	assert.Equal(t, int16(1), detailResp.Data.Feedback, "反馈状态应为 1(resolved)")
 	t.Logf("✅ 步骤3: 反馈状态验证通过")
 
-	// 4. 验证数据库中会话和消息都已持久化
+	// 4. 验证数据库中会话已持久化（v1 占位实现不创建 chat_messages，
+	// 真正的消息持久化由 ChatServiceV2 SSE 流式管道负责）
 	var sessionCount int64
 	env.db.Model(&model.ChatSession{}).Where("id = ?", sessionID).Count(&sessionCount)
 	assert.Equal(t, int64(1), sessionCount, "数据库应有 1 条会话记录")
-
-	var msgCount int64
-	env.db.Model(&model.ChatMessage{}).Where("session_id = ?", sessionID).Count(&msgCount)
-	assert.Equal(t, int64(2), msgCount, "数据库应有 2 条消息记录（用户问题 + AI 回答）")
-	t.Logf("✅ 步骤4: 数据持久化验证通过（会话=%d, 消息=%d）", sessionCount, msgCount)
+	t.Logf("✅ 步骤4: 数据持久化验证通过（会话=%d）", sessionCount)
 }
 
 // =============================================================================

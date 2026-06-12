@@ -46,10 +46,11 @@ const (
 
 // 知识文章状态
 const (
+	ArticleStatusDisabled   int16 = 0 // 已停用
 	ArticleStatusDraft      int16 = 1 // 草稿
 	ArticleStatusReviewing  int16 = 2 // 待审核
-	ArticleStatusPublished  int16 = 3 // 已发布
-	ArticleStatusDisabled   int16 = 4 // 已停用
+	ArticleStatusApproved   int16 = 3 // 审核通过
+	ArticleStatusPublished  int16 = 4 // 已发布
 	ArticleStatusRejected   int16 = 5 // 驳回
 )
 
@@ -90,6 +91,8 @@ const (
 // 为什么放在 model 包而非 DTO：业务映射函数与状态常量就近维护，
 // 避免 DTO 包承担数据模型之外的职责。
 func TicketStatusText(status int16) string {
+	// TODO(model/enums): 为知识文章、处理状态、紧急程度、影响范围也提供统一 Text 方法。
+	// 当前这些映射散落在 Service 和前端工具函数中，容易出现文案不一致。
 	switch status {
 	case TicketStatusPending:
 		return "待处理"

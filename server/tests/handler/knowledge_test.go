@@ -247,8 +247,10 @@ func TestKnowledgeHandler_Enable(t *testing.T) {
 
 	kb := &model.KnowledgeBase{Name: "启用测试", RAGWorkspaceSlug: "enable-slug", CreatedBy: 1}
 	knowledgeHandlerDB.Create(kb)
-	article := &model.KnowledgeArticle{KBID: kb.ID, Question: "Q", Answer: "A", Status: 4, CreatedBy: 1}
+	// GORM 默认零值（int16(0)）会被数据库 DEFAULT 1 覆盖，需创建后手动更新状态
+	article := &model.KnowledgeArticle{KBID: kb.ID, Question: "Q", Answer: "A", Status: 1, CreatedBy: 1}
 	knowledgeHandlerDB.Create(article)
+	knowledgeHandlerDB.Model(article).Update("status", int16(model.ArticleStatusDisabled))
 
 	r.POST("/api/v1/admin/articles/:id/enable", h.Enable)
 

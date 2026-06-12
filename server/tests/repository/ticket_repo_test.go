@@ -57,8 +57,14 @@ func setupTicketTestDB(t *testing.T) *gorm.DB {
 
 func cleanTicketTables(t *testing.T, db *gorm.DB) {
 	t.Helper()
+	// 按 FK 依赖逆序清理，避免外键约束冲突
 	db.Exec("DELETE FROM ticket_records")
 	db.Exec("DELETE FROM tickets")
+	db.Exec("DELETE FROM chat_messages")          // FK → chat_sessions
+	db.Exec("DELETE FROM chat_sessions")          // FK → users/knowledge_bases
+	db.Exec("DELETE FROM knowledge_chunks")       // FK → knowledge_articles
+	db.Exec("DELETE FROM knowledge_articles")     // FK → knowledge_bases
+	db.Exec("DELETE FROM knowledge_bases")        // FK → users
 	db.Exec("DELETE FROM users WHERE username LIKE 'test_%'")
 }
 

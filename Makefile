@@ -84,9 +84,9 @@ down-v:
 test:
 	cd server && go test ./tests/pkg/... ./tests/middleware/... ./tests/router/... ./tests/config/... ./tests/adapter/... -v
 
-# 运行集成测试（需要 PostgreSQL opsmind_test 库）
+# 运行集成测试（需要 PostgreSQL opsmind_test 库；-p 1 避免跨包并行共享数据库冲突）
 test-integration:
-	cd server && go test ./tests/... -tags=integration -v
+	cd server && go test ./tests/... -tags=integration -v -p 1
 
 # ===== 数据库 =====
 

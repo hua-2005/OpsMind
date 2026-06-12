@@ -84,8 +84,8 @@ go test ./tests/database/... -v -tags=integration
 go test ./tests/service/... -v -tags=integration
 go test ./tests/adapter/... -v -tags=integration
 
-# 运行全部集成测试（需 PostgreSQL + pgvector + MinIO）
-go test ./tests/... -v -tags=integration
+# 运行全部集成测试（需 PostgreSQL + pgvector + MinIO；-p 1 避免跨包并行共享数据库冲突）
+go test ./tests/... -v -tags=integration -p 1
 
 # Lint（如安装了 golangci-lint）
 golangci-lint run ./...

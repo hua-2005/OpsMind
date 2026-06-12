@@ -172,7 +172,7 @@ func (s *KnowledgeService) UpdateArticle(id int64, req request.UpdateArticleRequ
 		}
 		return err
 	}
-	if article.Status != 1 && article.Status != 5 {
+	if article.Status != model.ArticleStatusDraft && article.Status != model.ArticleStatusRejected {
 		// TODO(service/knowledge): 这里的 5 被当作驳回，但 enums.go 中 ArticleStatusRejected=5，API 文档中驳回=6。
 		// 应统一状态枚举，避免前后端对文章生命周期理解不一致。
 		return errcode.AppError{Code: errcode.ErrParam, Message: "仅草稿和驳回状态可编辑"}
@@ -193,10 +193,10 @@ func (s *KnowledgeService) SubmitReview(id int64, userID int64) error {
 		}
 		return err
 	}
-	if article.Status != 1 {
+	if article.Status != model.ArticleStatusDraft {
 		return errcode.AppError{Code: errcode.ErrParam, Message: "仅草稿状态可提交审核"}
 	}
-	return s.repo.UpdateArticleStatus(id, 2)
+	return s.repo.UpdateArticleStatus(id, int(model.ArticleStatusReviewing))
 }
 
 // Review 审核文章（待审核→已通过/已驳回）。
@@ -208,21 +208,21 @@ func (s *KnowledgeService) Review(id int64, reviewerID int64, req request.Review
 		}
 		return err
 	}
-	if article.Status != 2 {
+	if article.Status != model.ArticleStatusReviewing {
 		return errcode.AppError{Code: errcode.ErrParam, Message: "仅待审核状态可审核"}
 	}
 	if article.CreatedBy == reviewerID {
 		return errcode.AppError{Code: errcode.ErrParam, Message: "审核人不能是创建人"}
 	}
 	if req.Approved {
-		article.Status = 3
+		article.Status = model.ArticleStatusApproved
 		article.ReviewedBy = &reviewerID
 		return s.repo.UpdateArticle(article)
 	}
 	if strings.TrimSpace(req.ReviewComment) == "" {
 		return errcode.AppError{Code: errcode.ErrParam, Message: "驳回时必须填写审核意见"}
 	}
-	article.Status = 5
+	article.Status = model.ArticleStatusRejected
 	article.ReviewComment = req.ReviewComment
 	article.ReviewedBy = &reviewerID
 	return s.repo.UpdateArticle(article)
@@ -255,7 +255,7 @@ func (s *KnowledgeService) Publish(id int64, publisherID int64) error {
 		}
 		return err
 	}
-	if article.Status != 3 {
+	if article.Status != model.ArticleStatusApproved {
 		// TODO(service/knowledge): status=3 在 enums.go 表示已发布，但这里被当作审核通过。
 		// 需要增加 ArticleStatusApproved 或调整现有枚举，避免发布逻辑和状态文案冲突。
 		return errcode.AppError{Code: errcode.ErrParam, Message: "仅已审核通过的文章可发布"}
@@ -309,7 +309,7 @@ func (s *KnowledgeService) Publish(id int64, publisherID int64) error {
 	}
 
 	// Step 5: 更新状态
-	article.Status = 4
+	article.Status = model.ArticleStatusPublished
 	article.PublishedBy = &publisherID
 	return s.repo.UpdateArticle(article)
 }
@@ -354,7 +354,7 @@ func (s *KnowledgeService) Enable(id int64) error {
 	if article.Status != model.ArticleStatusDisabled {
 		return errcode.AppError{Code: errcode.ErrParam, Message: "仅已停用状态的文章可恢复"}
 	}
-	article.Status = 1 // 已停用 → 草稿
+	article.Status = model.ArticleStatusDraft // 已停用 → 草稿
 	return s.repo.UpdateArticle(article)
 }
 
@@ -537,7 +537,7 @@ func (s *KnowledgeService) RetryDocument(articleID int64) error {
 		return errcode.AppError{Code: errcode.ErrUnknown, Message: "文档处理器未初始化"}
 	}
 
-	if err := s.repo.UpdateArticleStatus(articleID, 1); err != nil {
+	if err := s.repo.UpdateArticleStatus(articleID, int(model.ArticleStatusDraft)); err != nil {
 		slog.Warn("更新文章状态失败，不阻断主流程", "article_id", articleID, "error", err)
 	}
 	task := rag.ProcessTask{
@@ -602,26 +602,26 @@ func mapProcessStatus(status string) int {
 	// 模型应增加 process_status/process_error 字段，保持两个生命周期独立。
 	switch status {
 	case "chunking", "embedding", "indexing":
-		return 1
+		return int(model.ArticleStatusDraft)
 	case "completed":
-		return 3
+		return int(model.ArticleStatusApproved)
 	case "failed":
-		return 1
+		return int(model.ArticleStatusDraft)
 	default:
-		return 1
+		return int(model.ArticleStatusDraft)
 	}
 }
 
 // mapArticleToProcessStatus 将文章状态映射为处理阶段描述。
 func mapArticleToProcessStatus(article *model.KnowledgeArticle) string {
 	switch article.Status {
-	case 1:
+	case model.ArticleStatusDraft:
 		return "pending"
-	case 3:
+	case model.ArticleStatusApproved:
 		return "completed"
-	case 4:
+	case model.ArticleStatusPublished:
 		return "published"
-	case 0:
+	case model.ArticleStatusDisabled:
 		return "disabled"
 	default:
 		return "unknown"

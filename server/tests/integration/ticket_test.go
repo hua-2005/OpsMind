@@ -40,10 +40,12 @@ import (
 
 // ticketIntEnv 封装申告集成测试环境。
 type ticketIntEnv struct {
-	r    *gin.Engine
-	db   *gorm.DB
-	repo *repository.TicketRepo
-	svc  *service.TicketService
+	r              *gin.Engine
+	db             *gorm.DB
+	repo           *repository.TicketRepo
+	svc            *service.TicketService
+	submitterID    int64 // 报障人用户 ID（用于测试中创建申告）
+	operatorID     int64 // 运维人员用户 ID
 }
 
 // setupTicketIntegration 创建申告集成测试环境。
@@ -163,7 +165,8 @@ func setupTicketIntegration(t *testing.T) *ticketIntEnv {
 		admin.POST("/tickets/:id/records", ticketH.AddRecord)
 	}
 
-	return &ticketIntEnv{r: r, db: db, repo: ticketRepo, svc: ticketSvc}
+	return &ticketIntEnv{r: r, db: db, repo: ticketRepo, svc: ticketSvc,
+		submitterID: submitter.ID, operatorID: operator.ID}
 }
 
 // createTicketViaAPI 通过 API 创建申告，返回 ticket_id 和 ticket_no。
@@ -400,7 +403,7 @@ func TestTicketIntegration_AutoClose(t *testing.T) {
 	// 1. 创建一个 8 天前的申告（模拟过期）
 	oldTicket := &model.Ticket{
 		TicketNo:     "TK-20260602-A001",
-		UserID:       1,
+		UserID:       env.submitterID,
 		Title:        "过期的申告",
 		Description:  "8 天前创建的申告",
 		Urgency:      1,
@@ -415,7 +418,7 @@ func TestTicketIntegration_AutoClose(t *testing.T) {
 	// 2. 再创建一个 1 小时前的新申告（不应被关闭）
 	newTicket := &model.Ticket{
 		TicketNo:     "TK-20260610-N001",
-		UserID:       1,
+		UserID:       env.submitterID,
 		Title:        "新的申告",
 		Description:  "1 小时前创建的申告",
 		Urgency:      1,

@@ -87,9 +87,15 @@ func setupKnowledgeTestDB(t *testing.T) *gorm.DB {
 // cleanKnowledgeTables 清理测试数据
 func cleanKnowledgeTables(t *testing.T, db *gorm.DB) {
 	t.Helper()
+	// 按 FK 依赖逆序清理，避免外键约束冲突
 	db.Exec("DELETE FROM knowledge_chunks")
 	db.Exec("DELETE FROM knowledge_articles")
 	db.Exec("DELETE FROM knowledge_bases")
+	db.Exec("DELETE FROM chat_messages")          // FK → chat_sessions
+	db.Exec("DELETE FROM chat_sessions")          // FK → users/knowledge_bases
+	db.Exec("DELETE FROM ticket_records")         // FK → tickets
+	db.Exec("DELETE FROM tickets")                // FK → users
+	db.Exec("DELETE FROM users WHERE username LIKE 'test_%'")
 }
 
 func TestKnowledgeRepo_CreateKB(t *testing.T) {

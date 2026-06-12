@@ -107,7 +107,7 @@ func TestSeedData_UserRoles(t *testing.T) {
 	t.Logf("✅ 用户-角色关联: %d 条", len(userRoles))
 
 	// 验证 admin 有关联角色
-	var count int64
+	count = 0
 	db.Table("user_roles").Where("user_id = ?", 1).Count(&count)
 	assert.Greater(t, count, int64(0), "admin 应有关联角色")
 	t.Logf("✅ admin 用户-角色关联: %d 条", count)
