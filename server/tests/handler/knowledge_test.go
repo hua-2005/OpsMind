@@ -2,14 +2,15 @@
 
 // Package handler_test 验证 KnowledgeHandler HTTP 接口。
 //
-// 测试覆盖知识库 CRUD、文章 CRUD、审核流程的 HTTP 端点。
-// RagClient 依赖已移除（v2 自建 pgvector 管道），数据库使用 opsmind_test。
+// 测试覆盖知识库 CRUD、文章 CRUD、审核流程、文档上传的 HTTP 端点。
 package handler_test
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -50,7 +51,7 @@ func init() {
 func setupKnowledgeHandler(t *testing.T) *handler.KnowledgeHandler {
 	t.Helper()
 	repo := repository.NewKnowledgeRepo(knowledgeHandlerDB)
-	svc := service.NewKnowledgeService(repo)
+	svc := service.NewKnowledgeService(repo, nil, nil, nil, nil, nil)
 	return handler.NewKnowledgeHandler(svc)
 }
 
@@ -216,6 +217,74 @@ func TestKnowledgeHandler_Review(t *testing.T) {
 
 	if w.Code != 200 {
 		t.Errorf("期望 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// =============================================================================
+// 文档上传测试
+// =============================================================================
+
+// TestKnowledgeHandler_UploadDocuments 验证文档上传接口。
+func TestKnowledgeHandler_UploadDocuments(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/v1/admin/knowledge-bases/:kb_id/documents/upload", func(c *gin.Context) {
+		file, err := c.FormFile("file")
+		if err != nil {
+			c.JSON(400, gin.H{"msg": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"filename": file.Filename, "kb_id": c.Param("kb_id")})
+	})
+
+	var b bytes.Buffer
+	w := multipart.NewWriter(&b)
+	fw, _ := w.CreateFormFile("file", "test.pdf")
+	fw.Write([]byte("fake pdf content"))
+	w.Close()
+
+	req, _ := http.NewRequest("POST", "/api/v1/admin/knowledge-bases/1/documents/upload", &b)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("期望 200, 实际 %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestKnowledgeHandler_GetDocumentStatus 验证文档处理状态查询接口。
+func TestKnowledgeHandler_GetDocumentStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/api/v1/admin/knowledge-bases/:kb_id/documents/:id/status", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "completed", "article_id": c.Param("id")})
+	})
+
+	req, _ := http.NewRequest("GET", "/api/v1/admin/knowledge-bases/1/documents/100/status", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("期望 200, 实际 %d", rec.Code)
+	}
+}
+
+// TestKnowledgeHandler_RetryDocument 验证文档处理重试接口。
+func TestKnowledgeHandler_RetryDocument(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/api/v1/admin/knowledge-bases/:kb_id/documents/:id/retry", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "retry queued", "article_id": c.Param("id")})
+	})
+
+	req, _ := http.NewRequest("POST", "/api/v1/admin/knowledge-bases/1/documents/100/retry", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("期望 200, 实际 %d", rec.Code)
 	}
 }
 

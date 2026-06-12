@@ -131,14 +131,15 @@ func setupChatIntegration(t *testing.T) *chatIntEnv {
 	// 组装依赖链（v1：RagClient 已移除，ChatService 使用占位实现）
 	knowledgeRepo := repository.NewKnowledgeRepo(db)
 	chatRepo := repository.NewChatRepo(db)
-	chatSvc := service.NewChatService(knowledgeRepo, chatRepo)
-	chatH := handler.NewChatHandler(chatSvc)
+	chatSvc := service.NewChatService(knowledgeRepo, chatRepo, nil, nil, nil, 5)
+	chatH := handler.NewChatHandler(chatSvc, nil)
 
 	// 路由（模拟认证中间件注入 user_id=1）
 	r := gin.New()
 	r.Use(middleware.RequestID())
 	r.Use(func(c *gin.Context) {
 		c.Set("currentUser", map[string]interface{}{"user_id": float64(1)})
+		c.Set("userID", int64(1))
 		c.Next()
 	})
 

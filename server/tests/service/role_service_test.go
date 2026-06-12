@@ -37,7 +37,8 @@ func init() {
 func setupRoleService(t *testing.T) *service.RoleService {
 	t.Helper()
 	repo := repository.NewRoleRepo(roleSvcDB)
-	return service.NewRoleService(repo, roleSvcDB)
+	userRepo := repository.NewUserRepo(roleSvcDB)
+	return service.NewRoleService(repo, userRepo, roleSvcDB)
 }
 
 func seedTestRole(t *testing.T, name string) *model.Role {

@@ -92,7 +92,7 @@ func setupChatHandlerTest(t *testing.T) *chatHandlerEnv {
 	knowledgeRepo := repository.NewKnowledgeRepo(db)
 	chatRepo := repository.NewChatRepo(db)
 	chatSvc := service.NewChatService(knowledgeRepo, chatRepo, nil, nil, nil, 5)
-	chatH := handler.NewChatHandler(chatSvc)
+	chatH := handler.NewChatHandler(chatSvc, nil)
 
 	// 路由
 	r := gin.New()
@@ -100,6 +100,7 @@ func setupChatHandlerTest(t *testing.T) *chatHandlerEnv {
 	// 模拟认证中间件：注入 user_id=1
 	r.Use(func(c *gin.Context) {
 		c.Set("currentUser", map[string]interface{}{"user_id": float64(1)})
+		c.Set("userID", int64(1))
 		c.Next()
 	})
 

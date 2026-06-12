@@ -69,9 +69,14 @@ func setupTicketHandlerTest(t *testing.T) *handlerTestEnv {
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`)
 
+	// 确保有测试用户（FK 约束要求 tickets.user_id 引用 users.id）
+	db.Exec(`INSERT INTO users (id, username, password_hash, real_name, phone, status, first_login)
+		VALUES (1, '_th_test', '$2a$10$hash', 'Test', '13800000001', 1, true)
+		ON CONFLICT (id) DO NOTHING`)
+
 	ticketRepo := repository.NewTicketRepo(db)
-	ticketSvc := service.NewTicketService(ticketRepo, db)
-	ticketH := handler.NewTicketHandler(ticketSvc)
+	ticketSvc := service.NewTicketService(ticketRepo, service.NewGormTxManager(db))
+	ticketH := handler.NewTicketHandler(ticketSvc, nil)
 
 	r := gin.New()
 	r.Use(middleware.RequestID())
@@ -82,6 +87,7 @@ func setupTicketHandlerTest(t *testing.T) *handlerTestEnv {
 			"username": "admin",
 			"roles":    []interface{}{"admin"},
 		})
+		c.Set("userID", int64(1))
 		c.Next()
 	})
 

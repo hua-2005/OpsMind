@@ -74,7 +74,8 @@ func setupSchedulerTest(t *testing.T) (*service.Scheduler, *model.User) {
 	}
 
 	ticketRepo := repository.NewTicketRepo(schedDB)
-	scheduler := service.NewScheduler(ticketRepo)
+	ticketSvc := service.NewTicketService(ticketRepo, service.NewGormTxManager(schedDB))
+	scheduler := service.NewScheduler(ticketSvc)
 
 	return scheduler, user
 }

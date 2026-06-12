@@ -160,26 +160,6 @@ func TestSeedData_Tickets(t *testing.T) {
 	t.Logf("✅ 处理记录: %d 条", len(records))
 }
 
-// TestSeedData_EmbeddingConfig 验证 Embedding 配置。
-func TestSeedData_EmbeddingConfig(t *testing.T) {
-	db := setupSeedDB(t)
-
-	var configs []model.EmbeddingConfig
-	db.Find(&configs)
-	require.GreaterOrEqual(t, len(configs), 2, "至少应有 2 个 Embedding 配置")
-
-	// 验证有一个默认配置
-	hasDefault := false
-	for _, c := range configs {
-		if c.IsDefault {
-			hasDefault = true
-			break
-		}
-	}
-	assert.True(t, hasDefault, "应有一个默认 Embedding 配置")
-	t.Logf("✅ Embedding 配置: %d 个, 有默认配置=%v", len(configs), hasDefault)
-}
-
 // TestSeedData_Messages 验证站内消息。
 func TestSeedData_Messages(t *testing.T) {
 	db := setupSeedDB(t)

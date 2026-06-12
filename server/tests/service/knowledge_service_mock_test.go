@@ -14,37 +14,37 @@ import (
 // v2 mocks
 // =============================================================================
 
-type mockKnowledgeRepoV2 struct {
+type mockKnowledgeRepo struct {
 	kbs      map[int64]*model.KnowledgeBase
 	articles map[int64]*model.KnowledgeArticle
 }
 
-func (m *mockKnowledgeRepoV2) FindKBByID(id int64) (*model.KnowledgeBase, error) {
+func (m *mockKnowledgeRepo) FindKBByID(id int64) (*model.KnowledgeBase, error) {
 	if kb, ok := m.kbs[id]; ok {
 		return kb, nil
 	}
 	return nil, fmt.Errorf("not found")
 }
 
-func (m *mockKnowledgeRepoV2) FindArticleByID(id int64) (*model.KnowledgeArticle, error) {
+func (m *mockKnowledgeRepo) FindArticleByID(id int64) (*model.KnowledgeArticle, error) {
 	if a, ok := m.articles[id]; ok {
 		return a, nil
 	}
 	return nil, fmt.Errorf("not found")
 }
 
-func (m *mockKnowledgeRepoV2) CreateArticle(article *model.KnowledgeArticle) error {
+func (m *mockKnowledgeRepo) CreateArticle(article *model.KnowledgeArticle) error {
 	article.ID = int64(len(m.articles) + 100)
 	m.articles[article.ID] = article
 	return nil
 }
 
-func (m *mockKnowledgeRepoV2) UpdateArticle(article *model.KnowledgeArticle) error {
+func (m *mockKnowledgeRepo) UpdateArticle(article *model.KnowledgeArticle) error {
 	m.articles[article.ID] = article
 	return nil
 }
 
-func (m *mockKnowledgeRepoV2) UpdateArticleStatus(id int64, status int) error {
+func (m *mockKnowledgeRepo) UpdateArticleStatus(id int64, status int) error {
 	if a, ok := m.articles[id]; ok {
 		a.Status = int16(status)
 		return nil
@@ -52,18 +52,18 @@ func (m *mockKnowledgeRepoV2) UpdateArticleStatus(id int64, status int) error {
 	return fmt.Errorf("not found")
 }
 
-func (m *mockKnowledgeRepoV2) CreateKB(kb *model.KnowledgeBase) error {
+func (m *mockKnowledgeRepo) CreateKB(kb *model.KnowledgeBase) error {
 	kb.ID = int64(len(m.kbs) + 1)
 	m.kbs[kb.ID] = kb
 	return nil
 }
 
-func (m *mockKnowledgeRepoV2) UpdateKB(kb *model.KnowledgeBase) error {
+func (m *mockKnowledgeRepo) UpdateKB(kb *model.KnowledgeBase) error {
 	m.kbs[kb.ID] = kb
 	return nil
 }
 
-func (m *mockKnowledgeRepoV2) ListKBs() ([]model.KnowledgeBase, error) {
+func (m *mockKnowledgeRepo) ListKBs() ([]model.KnowledgeBase, error) {
 	var result []model.KnowledgeBase
 	for _, kb := range m.kbs {
 		result = append(result, *kb)
@@ -71,7 +71,7 @@ func (m *mockKnowledgeRepoV2) ListKBs() ([]model.KnowledgeBase, error) {
 	return result, nil
 }
 
-func (m *mockKnowledgeRepoV2) ListArticles(kbID int64, status int, page, pageSize int) ([]model.KnowledgeArticle, int64, error) {
+func (m *mockKnowledgeRepo) ListArticles(kbID int64, status int, page, pageSize int) ([]model.KnowledgeArticle, int64, error) {
 	var result []model.KnowledgeArticle
 	for _, a := range m.articles {
 		if a.KBID == kbID && (status == -1 || int(a.Status) == status) {
@@ -81,49 +81,49 @@ func (m *mockKnowledgeRepoV2) ListArticles(kbID int64, status int, page, pageSiz
 	return result, int64(len(result)), nil
 }
 
-func (m *mockKnowledgeRepoV2) FindChunksByArticleID(articleID int64) ([]model.KnowledgeChunk, error) {
+func (m *mockKnowledgeRepo) FindChunksByArticleID(articleID int64) ([]model.KnowledgeChunk, error) {
 	return nil, nil
 }
 
-type mockChunkerV2 struct {
+type mockChunker struct {
 	chunks []string
 }
 
-func (m *mockChunkerV2) Split(text string) []string {
+func (m *mockChunker) Split(text string) []string {
 	return m.chunks
 }
 
-type mockEmbedderV2 struct {
+type mockEmbedder struct {
 	vectors   [][]float32
 	dimension int
 	err       error
 }
 
-func (m *mockEmbedderV2) Embed(ctx context.Context, texts []string) ([][]float32, int, error) {
+func (m *mockEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, int, error) {
 	return m.vectors, m.dimension, m.err
 }
 
-type mockVectorStoreV2 struct {
+type mockVectorStore struct {
 	inserted   []adapter.VectorChunk
 	deletedIDs []int64
 }
 
-func (m *mockVectorStoreV2) BatchInsert(ctx context.Context, chunks []adapter.VectorChunk) error {
+func (m *mockVectorStore) BatchInsert(ctx context.Context, chunks []adapter.VectorChunk) error {
 	m.inserted = chunks
 	return nil
 }
-func (m *mockVectorStoreV2) DeleteByArticle(ctx context.Context, articleID int64) error {
+func (m *mockVectorStore) DeleteByArticle(ctx context.Context, articleID int64) error {
 	m.deletedIDs = append(m.deletedIDs, articleID)
 	return nil
 }
-func (m *mockVectorStoreV2) CosineSearch(ctx context.Context, kbID int64, embedding []float32, topK int) ([]adapter.SearchResult, error) {
+func (m *mockVectorStore) CosineSearch(ctx context.Context, kbID int64, embedding []float32, topK int) ([]adapter.SearchResult, error) {
 	return nil, nil
 }
-func (m *mockVectorStoreV2) DeleteByKB(ctx context.Context, kbID int64) error { return nil }
-func (m *mockVectorStoreV2) CountByKB(ctx context.Context, kbID int64) (int64, error) {
+func (m *mockVectorStore) DeleteByKB(ctx context.Context, kbID int64) error { return nil }
+func (m *mockVectorStore) CountByKB(ctx context.Context, kbID int64) (int64, error) {
 	return 0, nil
 }
-func (m *mockVectorStoreV2) GetChunksByArticle(ctx context.Context, articleID int64) ([]adapter.ChunkContent, error) {
+func (m *mockVectorStore) GetChunksByArticle(ctx context.Context, articleID int64) ([]adapter.ChunkContent, error) {
 	return nil, nil
 }
 
@@ -131,9 +131,9 @@ func (m *mockVectorStoreV2) GetChunksByArticle(ctx context.Context, articleID in
 // 测试用例
 // =============================================================================
 
-// TestKnowledgeV2_Publish 验证 Publish 走 Chunker→Embedder→VectorStore 流程。
-func TestKnowledgeV2_Publish(t *testing.T) {
-	repo := &mockKnowledgeRepoV2{
+// TestKnowledgeMock_Publish 验证 Publish 走 Chunker→Embedder→VectorStore 流程。
+func TestKnowledgeMock_Publish(t *testing.T) {
+	repo := &mockKnowledgeRepo{
 		kbs: map[int64]*model.KnowledgeBase{
 			1: {ID: 1, Name: "测试KB"},
 		},
@@ -144,12 +144,12 @@ func TestKnowledgeV2_Publish(t *testing.T) {
 			},
 		},
 	}
-	chunker := &mockChunkerV2{chunks: []string{"VPN配置步骤1", "VPN配置步骤2"}}
-	embedder := &mockEmbedderV2{
+	chunker := &mockChunker{chunks: []string{"VPN配置步骤1", "VPN配置步骤2"}}
+	embedder := &mockEmbedder{
 		vectors:   [][]float32{{0.1, 0.2}, {0.3, 0.4}},
 		dimension: 2,
 	}
-	store := &mockVectorStoreV2{}
+	store := &mockVectorStore{}
 
 	svc := service.NewKnowledgeService(nil, chunker, embedder, store, nil, nil)
 	// 注入 repo（绕过 interface{} 构造器的限制）
@@ -172,14 +172,14 @@ func TestKnowledgeV2_Publish(t *testing.T) {
 	}
 }
 
-// TestKnowledgeV2_Disable 验证停用时删除向量。
-func TestKnowledgeV2_Disable(t *testing.T) {
-	repo := &mockKnowledgeRepoV2{
+// TestKnowledgeMock_Disable 验证停用时删除向量。
+func TestKnowledgeMock_Disable(t *testing.T) {
+	repo := &mockKnowledgeRepo{
 		articles: map[int64]*model.KnowledgeArticle{
 			20: {ID: 20, KBID: 1, Question: "旧文档", Answer: "...", Status: 4}, // 已发布
 		},
 	}
-	store := &mockVectorStoreV2{}
+	store := &mockVectorStore{}
 
 	svc := service.NewKnowledgeService(repo, nil, nil, store, nil, nil)
 
@@ -193,9 +193,9 @@ func TestKnowledgeV2_Disable(t *testing.T) {
 	}
 }
 
-// TestKnowledgeV2_Enable 验证启用后重置为草稿状态。
-func TestKnowledgeV2_Enable(t *testing.T) {
-	repo := &mockKnowledgeRepoV2{
+// TestKnowledgeMock_Enable 验证启用后重置为草稿状态。
+func TestKnowledgeMock_Enable(t *testing.T) {
+	repo := &mockKnowledgeRepo{
 		articles: map[int64]*model.KnowledgeArticle{
 			30: {ID: 30, KBID: 1, Question: "旧文档", Answer: "...", Status: int16(model.ArticleStatusDisabled)}, // 已停用
 		},
@@ -213,9 +213,9 @@ func TestKnowledgeV2_Enable(t *testing.T) {
 	}
 }
 
-// TestKnowledgeV2_PublishNotApproved 验证非已通过状态不可发布。
-func TestKnowledgeV2_PublishNotApproved(t *testing.T) {
-	repo := &mockKnowledgeRepoV2{
+// TestKnowledgeMock_PublishNotApproved 验证非已通过状态不可发布。
+func TestKnowledgeMock_PublishNotApproved(t *testing.T) {
+	repo := &mockKnowledgeRepo{
 		articles: map[int64]*model.KnowledgeArticle{
 			40: {ID: 40, KBID: 1, Question: "草稿", Answer: "...", Status: 1}, // 草稿
 		},

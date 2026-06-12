@@ -13,6 +13,7 @@ import (
 
 	"opsmind/internal/config"
 	"opsmind/internal/database"
+	"opsmind/internal/repository"
 	"opsmind/internal/dto/request"
 	"opsmind/internal/service"
 
@@ -70,7 +71,7 @@ func setupDashboardTest(t *testing.T) *service.DashboardService {
 	dashboardDB.Exec("DELETE FROM chat_sessions")
 	dashboardDB.Exec("DELETE FROM knowledge_articles")
 
-	return service.NewDashboardService(dashboardDB)
+	return service.NewDashboardService(repository.NewDashboardRepo(dashboardDB))
 }
 
 // 创建测试数据的辅助函数

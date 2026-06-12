@@ -101,28 +101,15 @@ func setupKnowledgeIntegration(t *testing.T) *knowledgeIntEnv {
 		synced_at TIMESTAMPTZ,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`)
-	db.Exec(`CREATE TABLE IF NOT EXISTS embedding_configs (
-		id BIGSERIAL PRIMARY KEY,
-		name VARCHAR(128) NOT NULL,
-		model_type SMALLINT NOT NULL,
-		api_endpoint VARCHAR(255),
-		api_key VARCHAR(255),
-		local_path VARCHAR(255),
-		vector_dimension INT NOT NULL,
-		is_default BOOLEAN NOT NULL DEFAULT FALSE,
-		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-	)`)
 
 	// 清理（按外键依赖顺序）
 	db.Exec("DELETE FROM knowledge_chunks")
 	db.Exec("DELETE FROM knowledge_articles")
 	db.Exec("DELETE FROM knowledge_bases")
-	db.Exec("DELETE FROM embedding_configs")
 
 	// 组装依赖链（v1：RagClient 已移除，KnowledgeService 管理数据库状态）
 	knowledgeRepo := repository.NewKnowledgeRepo(db)
-	knowledgeSvc := service.NewKnowledgeService(knowledgeRepo)
+	knowledgeSvc := service.NewKnowledgeService(knowledgeRepo, nil, nil, nil, nil, nil)
 	knowledgeH := handler.NewKnowledgeHandler(knowledgeSvc)
 
 	// 路由（模拟管理员用户 user_id=1）
@@ -153,9 +140,6 @@ func setupKnowledgeIntegration(t *testing.T) *knowledgeIntEnv {
 		admin.POST("/articles/:id/publish", knowledgeH.Publish)
 		admin.POST("/articles/:id/disable", knowledgeH.Disable)
 		admin.POST("/articles/:id/retry-sync", knowledgeH.RetrySync)
-		// Embedding 配置
-		admin.GET("/embedding-configs", knowledgeH.ListEmbeddingConfigs)
-		admin.POST("/embedding-configs", knowledgeH.CreateEmbeddingConfig)
 	}
 
 	return &knowledgeIntEnv{r: r, db: db}

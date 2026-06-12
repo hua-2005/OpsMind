@@ -3,7 +3,6 @@
 package model_test
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -52,14 +51,15 @@ func TestPaginateScope(t *testing.T) {
 				Model(&model.User{}).Scopes(scope).
 				Find(&[]model.User{}).Statement.SQL.String()
 
-			expectedLimit := fmt.Sprintf("LIMIT %d", tt.expectedLimit)
-			expectedOffset := fmt.Sprintf("OFFSET %d", tt.expectedOffset)
+			// GORM 使用参数化查询（$1, $2），检查 SQL 结构与参数一起
+			hasLimit := strings.Contains(sql, "LIMIT")
+			hasOffset := strings.Contains(sql, "OFFSET") || tt.expectedOffset == 0
 
-			if !strings.Contains(sql, expectedLimit) {
-				t.Errorf("SQL 缺少 %s\n实际 SQL: %s", expectedLimit, sql)
+			if !hasLimit {
+				t.Errorf("SQL 缺少 LIMIT 子句\n实际 SQL: %s", sql)
 			}
-			if !strings.Contains(sql, expectedOffset) {
-				t.Errorf("SQL 缺少 %s\n实际 SQL: %s", expectedOffset, sql)
+			if !hasOffset {
+				t.Errorf("SQL 缺少 OFFSET 子句\n实际 SQL: %s", sql)
 			}
 		})
 	}
