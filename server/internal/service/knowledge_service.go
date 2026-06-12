@@ -307,7 +307,7 @@ func (s *KnowledgeService) Publish(id int64, publisherID int64) error {
 		}
 	}
 	if err := s.store.BatchInsert(ctx, vc); err != nil {
-		// TODO(service/knowledge): 发布失败时应按 API 文档写 process_status=failed/process_error。
+		// TODO(service/knowledge): 发布失败时应设置 process_status=failed 和 process_error。
 		// 当前只返回错误，文章状态和错误原因不会持久化，前端无法展示可重试原因。
 		return errcode.AppError{Code: errcode.ErrRAGUnavailable, Message: "写入向量失败: " + err.Error()}
 	}
@@ -369,7 +369,7 @@ func (s *KnowledgeService) Enable(id int64) error {
 // ListArticles 分页查询文章列表。
 func (s *KnowledgeService) ListArticles(kbID int64, status int, page, pageSize int) (*response.ArticleListResponse, error) {
 	// TODO(service/knowledge): source_type/process_status 筛选未实现。
-	// API 文档已经定义这些查询参数，后端忽略会导致后台列表筛选失效。
+	// 调用方可能传这些参数，后端忽略会导致列表筛选失效。
 	articles, total, err := s.repo.ListArticles(kbID, status, page, pageSize)
 	if err != nil {
 		return nil, err

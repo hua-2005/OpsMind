@@ -172,7 +172,7 @@ func (s *ChatService) CreateChatSession(req request.CreateChatRequest, userID in
 			Temperature: 0.3,
 		})
 		if llmErr != nil {
-			// TODO(service/chat): LLM 生成失败按 API 文档应返回 ErrAIUnavailable，而不是保存兜底答案为成功会话。
+			// TODO(service/chat): LLM 生成失败应返回 ErrAIUnavailable，而不是保存兜底答案为成功会话。
 			// 需要区分“低置信度兜底”和“核心路径失败”两类场景。
 			llmAnswer = "AI 服务不可用，请稍后重试或提交申告。"
 			canSubmit = true

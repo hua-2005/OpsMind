@@ -184,7 +184,7 @@ func (s *LLMConfigService) CreateConfig(name string, providerType int16, baseURL
 //
 // 更新为默认时先清空其他默认，更新后立即热替换。
 func (s *LLMConfigService) UpdateConfig(cfg *model.LlmConfig) error {
-	// TODO(service/llm_config): 更新时 api_key 为空应保留原密钥的规则在 API 文档中存在，但这里会覆盖为空。
+	// TODO(service/llm_config): 更新时 api_key 为空应保留原密钥，当前会覆盖为空。
 	// 需要先读旧配置并区分“不传”“传空字符串清空”两种语义。
 	// ClearDefault + Update 包裹在事务中
 	if s.db != nil && cfg.IsDefault {

@@ -22,7 +22,7 @@ type LlmConfig struct {
 	ProviderType     int16     `gorm:"not null;default:1;column:provider_type" json:"provider_type"` // 1=llama.cpp, 2=OpenAI-compatible
 	BaseURL          string    `gorm:"type:varchar(512);not null;column:base_url" json:"base_url"`
 	EmbeddingBaseURL string    `gorm:"type:varchar(512);column:embedding_base_url" json:"embedding_base_url"` // Embedding 独立地址，空则回退到 BaseURL
-	// TODO(model/llm_config): API 文档要求 api_key 数据库 AES-256 加密存储。
+	// TODO(model/llm_config): api_key 应 AES-256 加密存储，当前明文落库。
 	// 当前模型是明文字段，需在 Repository/Service 层加入加解密或使用数据库加密方案。
 	APIKey           string    `gorm:"type:varchar(512);column:api_key" json:"api_key"`
 	LLMModel         string    `gorm:"type:varchar(128);not null;column:llm_model" json:"llm_model"`

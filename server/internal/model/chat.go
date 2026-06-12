@@ -15,7 +15,7 @@ type ChatSession struct {
 	Answer     string         `gorm:"type:text" json:"answer"`
 	Sources    datatypes.JSON `gorm:"type:jsonb" json:"sources"`
 	// TODO(model/chat): 增加 pipeline_metrics JSONB 字段。
-	// API 文档要求返回 RAG 步骤耗时，当前模型没有地方持久化历史会话的管道指标。
+	// TODO(model/chat): 增加 pipeline_metrics JSONB 字段持久化 RAG 步骤耗时。
 	Confidence float64        `json:"confidence"`
 	Feedback   int16          `json:"feedback"`
 	DurationMs int            `gorm:"column:duration_ms" json:"duration_ms"`

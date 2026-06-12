@@ -114,7 +114,7 @@ func (h *LLMConfigHandler) GetConfig(c *gin.Context) {
 //
 // PUT /api/v1/admin/llm-configs/:id
 func (h *LLMConfigHandler) UpdateConfig(c *gin.Context) {
-	// TODO(handler/llm_config): UpdateConfig 是全量替换，但 API 文档说明 api_key 不传时保留。
+	// TODO(handler/llm_config): UpdateConfig 是全量替换，api_key 不传时应保留原值。
 	// 需要使用指针字段 DTO 区分零值和未传字段。
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -213,7 +213,7 @@ func (h *LLMConfigHandler) TestConnection(c *gin.Context) {
 		resp, err := h.llmClient.ChatCompletion(ctx, testReq)
 		latency := time.Since(start).Milliseconds()
 		if err != nil {
-			// TODO(handler/llm_config): API 文档约定测试失败仍返回 code=0, data.success=false。
+			// TODO(handler/llm_config): 测试连接失败应返回 code=0, data.success=false 以区分接口错误。
 			// 当前返回 ErrAIUnavailable，会让前端把业务测试失败当成接口失败处理。
 			response.Error(c, errcode.ErrAIUnavailable, "连接测试失败: "+err.Error())
 			return

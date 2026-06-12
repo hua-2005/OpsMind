@@ -325,7 +325,7 @@ func (h *KnowledgeHandler) UploadDocuments(c *gin.Context) {
 		return
 	}
 
-	// TODO(handler/knowledge): API 文档要求 multipart 字段名 files 且支持多文件，这里只读取单个 file。
+	// TODO(handler/knowledge): 应支持 multipart 字段名 files 多文件上传，当前仅处理单个 file。
 	// 应改为 MultipartForm.File["files"] 循环处理，并返回 documents 数组。
 	file, err := c.FormFile("file")
 	if err != nil {
