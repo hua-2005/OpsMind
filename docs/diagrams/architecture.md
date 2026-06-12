@@ -1,250 +1,177 @@
-# 系统架构总览 (System Architecture)
+# 系统架构总览
 
-> **当前实现状态：** M1 ✅ / M2 ✅ / M3 ✅ / M4 ✅ / M5 ✅ / M6 ✅ — 全部 38 个任务已完成
-
----
+> 基于当前代码实际结构绘制。最后更新：2026-06-12
 
 ## 1. 分层架构全景
 
 ```mermaid
 flowchart TB
     subgraph Client["客户端层"]
-        Browser["浏览器 (Vue 3 + Radix Vue)"]
-        subgraph Pages["页面路由"]
-            Login["/login → Login.vue"]
-            AdminPages["/admin/* → AdminLayout.vue"]
-            PortalPages["/portal/* → PortalLayout.vue"]
-        end
+        Browser["浏览器 (Vue 3 + Naive UI)"]
+        Portal["门户端 /portal/*<br/>Chat.vue / TicketSubmit.vue / Messages.vue"]
+        Admin["后台管理 /admin/*<br/>Dashboard.vue / KnowledgeList.vue / TicketList.vue / LLMConfig.vue"]
     end
 
     subgraph Router["Gin Router :8080"]
-        Health["GET /health"]
-        Public["/api/v1/auth/*<br/>无中间件"]
-        Portal["/api/v1/portal/*<br/>JWTAuth"]
-        Admin["/api/v1/admin/*<br/>JWTAuth + RBAC"]
+        Health["GET /health → 无认证"]
+        Public["/api/v1/auth → 无中间件<br/>POST login / POST refresh"]
+        JWTGroup["/api/v1/auth → JWTAuth<br/>POST change-password / POST logout"]
+        PortalGroup["/api/v1/portal → JWTAuth<br/>chat-sessions / tickets / messages"]
+        AdminGroup["/api/v1/admin → JWTAuth + RBAC<br/>tickets / knowledge-bases / users / roles / llm-configs / dashboard / audit-logs"]
     end
 
-    subgraph MW["中间件层 middleware/"]
+    subgraph MW["中间件链 middleware/"]
         direction LR
-        RID["RequestID<br/>UUID 链路追踪"]
-        CORS["CORS<br/>跨域控制"]
-        LOG["Logger<br/>slog 结构化日志"]
-        JWT_M["JWTAuth<br/>Bearer Token 解析"]
-        RBAC_M["RequirePermission<br/>权限校验"]
+        RID["RequestID()"]
+        CORS["CORS()"]
+        Logger["Logger()"]
+        Recovery["Recovery()"]
+        JWTAuth["JWTAuth(secret)"]
+        RBAC["RequirePermission(perm)"]
     end
 
-    subgraph Handler["Handler 层"]
-        direction LR
-        AH["AuthHandler<br/>✅ Login/Refresh/ChangePassword/Logout"]
-        UH["UserHandler<br/>✅ Create/GetByID/List/Update/Freeze/Restore"]
-        RH["RoleHandler<br/>✅ Create/GetByID/List/Update/Delete"]
-        CH["ChatHandler<br/>✅ 已实现"]
-        TH["TicketHandler<br/>✅ 已实现"]
-        KH["KnowledgeHandler<br/>✅ 已实现"]
-        DH["DashboardHandler<br/>✅ 已实现"]
-        CFH["ConfigHandler<br/>✅ 已实现"]
-        AUH["AuditHandler<br/>✅ 已实现"]
-        MSH["MessageHandler<br/>✅ 已实现"]
+    subgraph Handler["Handler 层 handler/"]
+        AH["AuthHandler<br/>Login / Refresh / ChangePassword / Logout"]
+        CH["ChatHandler<br/>CreateChatSession / StreamChatSession / SubmitFeedback"]
+        KH["KnowledgeHandler<br/>CreateKB / CreateArticle / Publish / UploadDocuments"]
+        TH["TicketHandler<br/>CreateTicket / UpdateStatus / AddRecord"]
+        UH["UserHandler<br/>Create / Freeze / Unfreeze"]
+        RH["RoleHandler<br/>Create / UpdateRoleMenus"]
+        LRH["LLMConfigHandler<br/>CreateConfig / TestConnection"]
+        DH["DashboardHandler<br/>GetStats / GetTrends"]
+        AuH["AuditHandler<br/>List"]
     end
 
-    subgraph Service["Service 层"]
-        direction LR
-        AS["AuthService<br/>✅ Login/RefreshToken/ChangePassword<br/>buildLoginResponse/buildMenuTree"]
-        US["UserService<br/>✅ CRUD + Freeze/Restore"]
-        RS["RoleService<br/>✅ CRUD"]
-        CS["ChatService<br/>✅ 已实现"]
-        TS["TicketService<br/>✅ 已实现"]
-        KS["KnowledgeService<br/>✅ 已实现"]
-        DS["DashboardService<br/>✅ 已实现"]
-        CfS["ConfigService<br/>✅ 已实现"]
-        MS["MessageService<br/>✅ 已实现"]
-        Sch["Scheduler<br/>✅ 已实现"]
+    subgraph Service["Service 层 service/"]
+        AuthSvc["AuthService<br/>Login / RefreshToken"]
+        ChatSvc["ChatService<br/>CreateChatSession → pipeline.Execute + llmClient.ChatCompletion"]
+        KnowledgeSvc["KnowledgeService<br/>Publish → chunker.Split + embedder.Embed + store.BatchInsert"]
+        TicketSvc["TicketService<br/>UpdateStatus → 状态机校验"]
+        UserSvc["UserService / RoleService"]
+        LLMSvc["LLMConfigService<br/>atomic.Value 热替换"]
+        DashboardSvc["DashboardService<br/>原始 SQL 聚合查询"]
+        AuditSvc["AuditService<br/>分页 + 批量姓名查询"]
     end
 
-    subgraph Repository["Repository 层"]
-        direction LR
-        URepo["UserRepo<br/>✅ User + Role + Menu + UserRole + RoleMenu"]
-        RRepo["RoleRepo<br/>✅ Role CRUD"]
-        CRepo["ConfigRepo<br/>✅ SystemConfig CRUD"]
-        TRepo["TicketRepo<br/>✅ 已实现"]
-        KRepo["KnowledgeRepo<br/>✅ 已实现"]
-        ChRepo["ChatRepo<br/>✅ 已实现"]
-        ARepo["AuditRepo<br/>✅ 已实现"]
-        MRepo["MessageRepo<br/>✅ 已实现"]
+    subgraph RAG["RAG 引擎 rag/"]
+        Pipeline["Pipeline.Execute()<br/>QueryRewrite → MultiRoute → VectorRetrieve<br/>→ BM25Retrieve → HybridFuse → Rerank"]
+        Processor["Processor.Submit()<br/>goroutine pool 异步文档处理"]
+        Chunker["Chunker.Split()<br/>RecursiveCharacterTextSplitter"]
+        Embedder["Embedder.Embed()<br/>批量 /v1/embeddings"]
+        BM25["BM25Retriever<br/>Okapi BM25 + gse 中文分词"]
     end
 
     subgraph Adapter["适配层 adapter/"]
-        Rag["RagClient<br/>✅ AnythingLLM"]
-        Storage["StorageClient<br/>✅ MinIO"]
+        LLM["LLMClient 接口<br/>OpenAIClient — ChatCompletion / ChatCompletionStream"]
+        EMB["EmbeddingClient 接口<br/>OpenAIEmbeddingClient — CreateEmbeddings"]
+        VEC["VectorStore 接口<br/>PgvectorStore — BatchInsert / CosineSearch / DeleteByArticle"]
+        STO["StorageClient 接口<br/>MinIOClient — Upload / Delete"]
     end
 
-    subgraph Data["数据层 (Docker)"]
-        PG[("PostgreSQL 18")]
-        MinIO[("MinIO S3<br/>✅")]
-        AnythingLLM[("AnythingLLM<br/>✅")]
+    subgraph Infra["基础设施"]
+        PG["PostgreSQL 18 + pgvector<br/>业务数据 + halfvec 向量 + HNSW 索引"]
+        MinIO["MinIO<br/>Bucket: opsmind-knowledge / opsmind-attachments"]
+        LlamaCpp["llama.cpp server (可选)<br/>OpenAI-compat API :8080/v1"]
     end
 
     Browser --> Router
     Router --> MW
     MW --> Handler
     Handler --> Service
-    Service --> Repository
+    Service --> RAG
     Service --> Adapter
-    Repository --> PG
-    Adapter --> AnythingLLM
-    Adapter --> MinIO
+    RAG --> Adapter
+    Adapter --> Infra
 
-    style AH fill:#2ecc71,color:#fff
-    style UH fill:#2ecc71,color:#fff
-    style RH fill:#2ecc71,color:#fff
-    style AS fill:#2ecc71,color:#fff
-    style US fill:#2ecc71,color:#fff
-    style RS fill:#2ecc71,color:#fff
-    style URepo fill:#2ecc71,color:#fff
-    style RRepo fill:#2ecc71,color:#fff
-    style CRepo fill:#2ecc71,color:#fff
+    style RAG fill:#5e6ad220,stroke:#5e6ad2
+    style Adapter fill:#22c55e20,stroke:#22c55e
+    style Infra fill:#f59e0b20,stroke:#f59e0b
 ```
 
----
+## 2. 请求生命周期
 
-## 2. 模块依赖图
+```mermaid
+sequenceDiagram
+    participant C as 客户端
+    participant G as Gin Engine
+    participant RID as RequestID
+    participant CORS as CORS
+    participant LOG as Logger
+    participant JWT as JWTAuth
+    participant RBAC as RBAC
+    participant H as Handler
+    participant S as Service
+    participant Repo as Repository
+    participant DB as PostgreSQL
+
+    C->>G: HTTP Request
+    G->>RID: middleware.RequestID() — 注入 X-Request-ID
+    RID->>CORS: middleware.CORS() — 跨域头
+    CORS->>LOG: middleware.Logger() — 记录 method/path/status/latency
+    LOG->>JWT: middleware.JWTAuth(secret)
+    
+    alt Token 缺失或无效
+        JWT-->>C: 401 {"code":10001}
+    else Token 有效
+        JWT->>JWT: c.Set("userID", claims.UserID)
+        JWT->>RBAC: middleware.RequirePermission("user:manage")
+        alt 无权限
+            RBAC-->>C: 403 {"code":10002}
+        else 有权限
+            RBAC->>H: handler.Method(c)
+            H->>H: c.ShouldBindJSON(&req) → 参数校验
+            H->>H: getCurrentUserID(c) → userID
+            H->>S: svc.BusinessMethod(req, userID)
+            S->>S: 业务规则校验
+            S->>Repo: repo.DataAccess()
+            Repo->>DB: GORM Query
+            DB-->>Repo: Result
+            Repo-->>S: Data
+            S-->>H: Response
+            H->>H: response.Success(c, data)
+            H-->>C: 200 {"code":0, "data":{...}}
+        end
+    end
+```
+
+## 3. 模块依赖关系
 
 ```mermaid
 flowchart LR
-    subgraph Entry["入口"]
-        Main["cmd/main.go<br/>Config → DB → Repo → Service → Handler → Router"]
+    subgraph 入口
+        MAIN["cmd/main.go<br/>配置→DB→Repo→Service→Handler→Router→Scheduler"]
     end
 
-    Main --> Router["router.Setup(cfg, handlers)"]
-
-    Router --> AH2["AuthHandler"]
-    Router --> UH2["UserHandler"]
-    Router --> RH2["RoleHandler"]
-
-    AH2 --> AS2["AuthService"]
-    AS2 --> URepo2["UserRepo"]
-    AS2 --> JWT2["pkg/jwt"]
-    AS2 --> Hash2["pkg/hash"]
-
-    UH2 --> US2["UserService"]
-    US2 --> URepo2
-    US2 --> Hash2
-
-    RH2 --> RS2["RoleService"]
-    RS2 --> RRepo2["RoleRepo"]
-    RS2 --> URepo2
-
-    URepo2 --> DB2[("PostgreSQL")]
-    RRepo2 --> DB2
-
-    Main --> Config["config.Load()"]
-    Main --> DB["database.Init()"]
-    Main --> Migrate["database.AutoMigrate()"]
-```
-
----
-
-## 3. 数据库 ER 图 (当前 M1M2 已建表)
-
-```mermaid
-erDiagram
-    USERS ||--o{ USER_ROLES : has
-    ROLES ||--o{ USER_ROLES : assigned_to
-    ROLES ||--o{ ROLE_MENUS : has
-    MENUS ||--o{ ROLE_MENUS : belongs_to
-
-    USERS {
-        bigint id PK
-        varchar username UK
-        varchar password_hash
-        varchar real_name
-        varchar phone
-        varchar email
-        smallint status
-        boolean first_login
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    ROLES {
-        bigint id PK
-        varchar name UK
-        varchar description
-        jsonb permissions
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    USER_ROLES {
-        bigint user_id PK_FK
-        bigint role_id PK_FK
-    }
-
-    MENUS {
-        bigint id PK
-        varchar name
-        varchar path
-        varchar icon
-        bigint parent_id
-        int sort_order
-        varchar type
-    }
-
-    ROLE_MENUS {
-        bigint role_id PK_FK
-        bigint menu_id PK_FK
-    }
-```
-
----
-
-## 4. 目录结构与职责
-
-```mermaid
-flowchart LR
-    subgraph Server["server/ (Go 后端)"]
-        direction TB
-        CMD["cmd/main.go — 入口"]
-        CFG["config/ — Viper 配置"]
-        DB2["database/ — GORM 连接 + AutoMigrate"]
-        MW2["middleware/ — JWT / RBAC / CORS / Logger / RequestID"]
-        RT["router/ — 路由注册 (public/portal/admin)"]
-        HDL["handler/ — 参数校验、响应格式化"]
-        SVC["service/ — 业务逻辑、事务管理"]
-        REPO["repository/ — 数据访问 (GORM)"]
-        MDL["model/ — GORM 模型 + 枚举"]
-        ADAPT["adapter/ — RagClient / StorageClient"]
-        DTO["dto/ — request/ + response/"]
-        PKG["pkg/ — response / errcode / jwt / hash"]
-        TST["tests/ — 测试 (config/database/model/service/handler/middleware/adapter/pkg)"]
+    subgraph 核心业务
+        AUTH["Auth"] --> USER["User/Role"]
+        CHAT["Chat"] --> RAG_ENGINE["RAG Engine"]
+        CHAT --> LLM_CFG["LLM Config"]
+        KNOWLEDGE["Knowledge"] --> RAG_ENGINE
+        KNOWLEDGE --> LLM_CFG
+        TICKET["Ticket"] --> MESSAGE["Message"]
+        TICKET -.-> KNOWLEDGE
+        DASHBOARD["Dashboard"] --> DB_DIRECT["DB (Raw SQL)"]
+        AUDIT["Audit"] --> USER
     end
 
-    subgraph Web["web/ (Vue 3 前端)"]
-        direction TB
-        API["api/ — Axios 封装 (auth / user)"]
-        STORE["stores/ — Pinia (auth / app)"]
-        RTR["router/ — Vue Router + 守卫"]
-        VIEWS["views/ — auth/ / admin/ / portal/"]
-        COMP["components/ — layout/ / common/"]
-        UTIL["utils/ — request.ts / auth.ts"]
-        STYLE["styles/ — Linear Design 暗色主题"]
+    subgraph 共享依赖
+        JWT_LIB["pkg/jwt"]
+        HASH_LIB["pkg/hash"]
+        ERRCODE["pkg/errcode"]
+        RESPONSE["pkg/response"]
     end
 
-    CMD -->|读取| CFG
-    CMD -->|初始化| DB2
-    CMD -->|创建| REPO
-    CMD -->|创建| SVC
-    CMD -->|创建| HDL
-    CMD -->|创建| RT
-    HDL --> SVC --> REPO --> DB2
-    MDL --> DB2
-    DTO --> HDL
-    DTO --> SVC
-    PKG --> HDL
-    PKG --> SVC
-    PKG --> MW2
+    MAIN --> AUTH
+    MAIN --> CHAT
+    MAIN --> KNOWLEDGE
+    MAIN --> TICKET
+    MAIN --> DASHBOARD
+    MAIN --> AUDIT
+    AUTH --> JWT_LIB
+    AUTH --> HASH_LIB
+    CHAT --> ERRCODE
+    KNOWLEDGE --> ERRCODE
 
-    Browser["浏览器"] --> RT
-    Browser --> Web
-    Web -->|Axios Proxy| RT
+    style RAG_ENGINE fill:#5e6ad230,stroke:#5e6ad2
+    style LLM_CFG fill:#22c55e30,stroke:#22c55e
 ```
