@@ -64,9 +64,8 @@ func (s *UserService) List(page, pageSize int, keyword string) (*response.UserLi
 
 // Create 创建用户。
 //
-// 流程：校验用户名唯一 → 校验密码策略 → bcrypt 哈希 → 创建用户 → 分配角色。
-// 为什么用户名冲突返回 10005 而非 10003：10005 明确表示资源冲突，
-// 前端可根据此错误码展示"用户名已被占用"提示。
+// 流程：校验用户名唯一 → 校验密码策略 → bcrypt 哈希 → 事务(创建用户 + 分配角色)。
+// 为什么包裹在事务中：若用户创建成功但角色分配失败，事务回滚保证数据一致性。
 func (s *UserService) Create(req request.CreateUserRequest) error {
 	// 校验用户名唯一
 	exists, err := s.repo.ExistsByUsername(req.Username)
@@ -98,26 +97,27 @@ func (s *UserService) Create(req request.CreateUserRequest) error {
 		FirstLogin:   true,
 	}
 
-	// TODO: Create + AssignRoles 不在同一事务中。
-	// 若用户创建成功但角色分配失败，用户已持久化但无角色，数据不一致。
-	// 应包裹在事务中: db.Transaction(func(tx *gorm.DB) error { ... })。
-	if err := s.repo.Create(user); err != nil {
-		return err
-	}
-
-	// 分配角色
-	if len(req.RoleIDs) > 0 {
-		if err := s.repo.AssignRoles(user.ID, req.RoleIDs); err != nil {
+	// 包裹在事务中：Create + AssignRoles 原子执行
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(user).Error; err != nil {
 			return err
 		}
-	}
 
-	return nil
+		if len(req.RoleIDs) > 0 {
+			txRepo := repository.NewUserRepo(tx)
+			if err := txRepo.AssignRoles(user.ID, req.RoleIDs); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 // Update 更新用户基本信息。
 //
 // 仅更新 RealName/Phone/Email 和角色分配，密码修改走独立接口。
+// 包裹在事务中保证 Update + AssignRoles 原子性。
 func (s *UserService) Update(id int64, req request.UpdateUserRequest) error {
 	user, err := s.repo.GetByID(id)
 	if err != nil {
@@ -131,17 +131,19 @@ func (s *UserService) Update(id int64, req request.UpdateUserRequest) error {
 	user.Phone = req.Phone
 	user.Email = req.Email
 
-	// TODO: Update + AssignRoles 不在同一事务中，与 Create 同。
-	if err := s.repo.Update(user); err != nil {
-		return err
-	}
+	// 包裹在事务中：Update + AssignRoles 原子执行
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(user).Error; err != nil {
+			return err
+		}
 
-	// 重新分配角色
-	if err := s.repo.AssignRoles(id, req.RoleIDs); err != nil {
-		return err
-	}
+		txRepo := repository.NewUserRepo(tx)
+		if err := txRepo.AssignRoles(id, req.RoleIDs); err != nil {
+			return err
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // Freeze 冻结用户。

@@ -23,6 +23,11 @@ func NewLlmConfigRepo(db *gorm.DB) *LlmConfigRepo {
 	return &LlmConfigRepo{db: db}
 }
 
+// DB 返回底层 *gorm.DB，供 Service 层事务操作使用。
+func (r *LlmConfigRepo) DB() *gorm.DB {
+	return r.db
+}
+
 // Create 创建 LLM 配置。
 func (r *LlmConfigRepo) Create(cfg *model.LlmConfig) error {
 	return r.db.Create(cfg).Error

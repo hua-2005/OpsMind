@@ -216,15 +216,53 @@ func TestTicketRepo_IncrementSupplementCount(t *testing.T) {
 	}
 	requireNoErr(t, db.Create(ticket).Error)
 
-	err := repo.IncrementSupplementCount(ticket.ID)
+	ok, err := repo.IncrementSupplementCount(ticket.ID)
 	if err != nil {
 		t.Fatalf("期望无错误, got %v", err)
+	}
+	if !ok {
+		t.Fatal("supplement_count=1 时应成功自增")
 	}
 
 	var updated model.Ticket
 	db.First(&updated, ticket.ID)
 	if updated.SupplementCount != 2 {
 		t.Errorf("期望 SupplementCount=2, got %d", updated.SupplementCount)
+	}
+}
+
+// TestTicketRepo_IncrementSupplementCount_Exceeded 验证超限时原子拒绝。
+//
+// 修复前：IncrementSupplementCount 无条件自增 supplement_count + 1，
+// 并发请求可绕过 Service 层检查将计数推到 4、5。
+// 修复后：使用 WHERE supplement_count < 3 的原子 UPDATE，
+// ok=false 表示因超限未执行自增。
+func TestTicketRepo_IncrementSupplementCount_Exceeded(t *testing.T) {
+	db := setupTicketTestDB(t)
+	cleanTicketTables(t, db)
+	repo := repository.NewTicketRepo(db)
+	user := createTestUser(t, db, "test_supp_exceeded")
+
+	ticket := &model.Ticket{
+		TicketNo: "TK-20260609-SUPP3", UserID: user.ID, Title: "超限测试",
+		Description: "描述", Urgency: 1, ContactPhone: "x", Status: 2, Source: 1,
+		SupplementCount: 3,
+	}
+	requireNoErr(t, db.Create(ticket).Error)
+
+	ok, err := repo.IncrementSupplementCount(ticket.ID)
+	if err != nil {
+		t.Fatalf("期望无错误, got %v", err)
+	}
+	if ok {
+		t.Fatal("supplement_count=3 时 IncrementSupplementCount 应返回 ok=false（超限拒绝）")
+	}
+
+	// 验证计数未被错误自增
+	var updated model.Ticket
+	db.First(&updated, ticket.ID)
+	if updated.SupplementCount != 3 {
+		t.Errorf("supplement_count 应保持 3, 实际 %d", updated.SupplementCount)
 	}
 }
 

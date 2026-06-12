@@ -26,11 +26,12 @@ import (
 // TicketService 申告管理服务。
 type TicketService struct {
 	repo *repository.TicketRepo
+	db   *gorm.DB
 }
 
 // NewTicketService 创建 TicketService 实例。
-func NewTicketService(repo *repository.TicketRepo) *TicketService {
-	return &TicketService{repo: repo}
+func NewTicketService(repo *repository.TicketRepo, db *gorm.DB) *TicketService {
+	return &TicketService{repo: repo, db: db}
 }
 
 // =============================================================================
@@ -186,17 +187,13 @@ func (s *TicketService) UpdateStatus(id int64, operatorID int64, req request.Upd
 		if ticket.Status != 2 {
 			return AppError{Code: errcode.ErrParam, Message: "仅处理中状态可请求补充信息"}
 		}
-		// 补充次数上限检查
-		// TODO: 竞态条件 — ticket.SupplementCount 是读取后几毫秒的旧值。
-		// 并发请求可能同时通过 >= 3 检查，双双自增到 4、5 并转入状态 3。
-		// 应改为 SQL 原子检查: UPDATE ... SET supplement_count = supplement_count + 1
-		// WHERE id = ? AND supplement_count < 3，然后检查 RowsAffected。
-		if ticket.SupplementCount >= 3 {
-			return AppError{Code: errcode.ErrParam, Message: "补充信息次数已达上限（3次）"}
-		}
-		// 原子自增 supplement_count
-		if err := s.repo.IncrementSupplementCount(id); err != nil {
+		// 原子自增 supplement_count，WHERE supplement_count < 3 保证并发安全
+		ok, err := s.repo.IncrementSupplementCount(id)
+		if err != nil {
 			return err
+		}
+		if !ok {
+			return AppError{Code: errcode.ErrParam, Message: "补充信息次数已达上限（3次）"}
 		}
 		newStatus = 3
 		recordAction = "request_info"
@@ -218,24 +215,23 @@ func (s *TicketService) UpdateStatus(id int64, operatorID int64, req request.Upd
 		return AppError{Code: errcode.ErrParam, Message: "不支持的操作类型: " + req.Action}
 	}
 
-	// 更新状态
-	// TODO: UpdateStatus + CreateRecord 不在同一事务中。
-	// 若状态更新成功但 record 创建失败（约束冲突/磁盘满），
-	// 状态已变化但无对应的 timeline 记录，数据不一致。
-	// 应包裹在 s.repo.Transaction(func(tx *gorm.DB) error { ... }) 中。
-	if err := s.repo.UpdateStatus(id, int(newStatus)); err != nil {
-		return err
-	}
+		// 包裹在事务中：UpdateStatus + CreateRecord 原子执行，
+		// 避免状态已变但无 timeline 记录的数据不一致。
+		return s.db.Transaction(func(tx *gorm.DB) error {
+			txRepo := repository.NewTicketRepo(tx)
+			if err := txRepo.UpdateStatus(id, int(newStatus)); err != nil {
+				return err
+			}
 
-	// 创建处理记录
-	record := &model.TicketRecord{
-		TicketID:   id,
-		OperatorID: operatorID,
-		Action:     recordAction,
-		Content:    req.Result,
+			record := &model.TicketRecord{
+				TicketID:   id,
+				OperatorID: operatorID,
+				Action:     recordAction,
+				Content:    req.Result,
+			}
+			return txRepo.CreateRecord(record)
+		})
 	}
-	return s.repo.CreateRecord(record)
-}
 
 // =============================================================================
 // AddRecord

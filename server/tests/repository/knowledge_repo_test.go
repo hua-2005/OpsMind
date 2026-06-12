@@ -428,6 +428,49 @@ func TestKnowledgeRepo_ListArticles_Pagination(t *testing.T) {
 	assert.Equal(t, int64(5), total)
 	assert.Len(t, articles, 1)
 }
+// TestKnowledgeRepo_ListArticles_PreloadKnowledgeBase 验证 Preload KnowledgeBase 避免 N+1 查询。
+//
+// 修复前：ListArticles 缺少 .Preload("KnowledgeBase")，
+// 每次访问 article.KnowledgeBase.Name 都会触发一次额外的 DB 查询（N+1 问题）。
+// 修复后：KnowledgeBase 在列表查询时一并加载。
+func TestKnowledgeRepo_ListArticles_PreloadKnowledgeBase(t *testing.T) {
+	db := setupKnowledgeTestDB(t)
+	cleanKnowledgeTables(t, db)
+	repo := repository.NewKnowledgeRepo(db)
+
+	now := time.Now()
+	kb := &model.KnowledgeBase{
+		Name:             "Preload测试库",
+		RAGWorkspaceSlug: "preload-test-slug",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	require.NoError(t, db.Create(kb).Error)
+
+	article := &model.KnowledgeArticle{
+		KBID:      kb.ID,
+		Question:  "Preload测试",
+		Answer:    "验证Preload",
+		Status:    1,
+		CreatedBy: 1,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	require.NoError(t, db.Create(article).Error)
+
+	articles, _, err := repo.ListArticles(kb.ID, -1, 1, 10)
+	require.NoError(t, err)
+	require.NotEmpty(t, articles)
+
+	// KnowledgeBase 应被预加载，Name 不为空
+	if articles[0].KnowledgeBase.Name == "" {
+		t.Error("ListArticles 未预加载 KnowledgeBase — KBName 为空（N+1 查询风险）")
+	}
+	if articles[0].KnowledgeBase.Name != "Preload测试库" {
+		t.Errorf("期望 KBName='Preload测试库', got '%s'", articles[0].KnowledgeBase.Name)
+	}
+}
+
 
 // TestKnowledgeRepo_UpdateArticleStatus 更新文章状态
 func TestKnowledgeRepo_UpdateArticleStatus(t *testing.T) {

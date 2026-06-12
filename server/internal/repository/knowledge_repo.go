@@ -114,8 +114,7 @@ func (r *KnowledgeRepo) ListArticles(kbID int64, status int, page, pageSize int)
 	var articles []model.KnowledgeArticle
 	var total int64
 
-	query := r.db.Model(&model.KnowledgeArticle{}).Where("kb_id = ?", kbID)
-	// TODO: 缺少 .Preload("KnowledgeBase") — 导致 ListArticles 的 KBName 字段触发 N+1 查询。
+	query := r.db.Model(&model.KnowledgeArticle{}).Where("kb_id = ?", kbID).Preload("KnowledgeBase")
 	if status >= 0 {
 		query = query.Where("status = ?", status)
 	}

@@ -70,7 +70,7 @@ func setupTicketHandlerTest(t *testing.T) *handlerTestEnv {
 	)`)
 
 	ticketRepo := repository.NewTicketRepo(db)
-	ticketSvc := service.NewTicketService(ticketRepo)
+	ticketSvc := service.NewTicketService(ticketRepo, db)
 	ticketH := handler.NewTicketHandler(ticketSvc)
 
 	r := gin.New()

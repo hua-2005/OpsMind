@@ -70,12 +70,14 @@ func (r *TicketRepo) UpdateStatus(id int64, status int) error {
 	return r.db.Model(&model.Ticket{}).Where("id = ?", id).Update("status", status).Error
 }
 
-// IncrementSupplementCount 自增补充信息计数。
+// IncrementSupplementCount 原子自增补充信息计数。
 //
-// 为什么用 gorm.Expr 而非读取后更新：原子操作避免并发竞态条件。
-func (r *TicketRepo) IncrementSupplementCount(id int64) error {
-	return r.db.Model(&model.Ticket{}).Where("id = ?", id).
-		UpdateColumn("supplement_count", gorm.Expr("supplement_count + 1")).Error
+// 使用 WHERE supplement_count < 3 条件保证原子性，并发请求不会被绕过上限。
+// 返回 ok=true 表示自增成功，ok=false 表示已达上限（3 次）未执行自增。
+func (r *TicketRepo) IncrementSupplementCount(id int64) (bool, error) {
+	result := r.db.Model(&model.Ticket{}).Where("id = ? AND supplement_count < 3", id).
+		UpdateColumn("supplement_count", gorm.Expr("supplement_count + 1"))
+	return result.RowsAffected > 0, result.Error
 }
 
 // ListByUser 分页查询指定用户的申告列表。
@@ -151,17 +153,57 @@ func (r *TicketRepo) ListAll(status int, urgency int, page, pageSize int) ([]mod
 // AutoCloseTickets 批量关闭超过指定时间的申告，返回关闭数量。
 //
 // 关闭条件：status IN (1,2,3) AND created_at < olderThan。
-// 只关闭待处理(1)、处理中(2)、需补充信息(3)的申告。
-// 已解决(4)和已关闭(5)的申告不处理。
-// TODO: 魔数 1,2,3,5 应替换为 model 枚举常量。
-// 应使用 model.TicketStatusPending/Processing/NeedSupplement/Closed。
-// TODO: 批量关闭不创建 TicketRecord，ticket 直接从 1/2/3→5 无 timeline 记录。
-// 应在 scheduler 层遍历关闭的 ticket，逐个创建 TicketRecord。
+// 使用 model 枚举常量替代魔数，并为每个关闭的 ticket 创建 TicketRecord。
+// 所有操作在事务中执行，保证状态变更与 timeline 记录的一致性。
 func (r *TicketRepo) AutoCloseTickets(olderThan time.Time) (int64, error) {
-	result := r.db.Model(&model.Ticket{}).
-		Where("status IN (1,2,3) AND created_at < ?", olderThan).
-		Update("status", 5)
-	return result.RowsAffected, result.Error
+	var closedIDs []int64
+
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		// 先查询待关闭的 ticket ID
+		var tickets []model.Ticket
+		if err := tx.Model(&model.Ticket{}).
+			Where("status IN ? AND created_at < ?",
+				[]int16{model.TicketStatusPending, model.TicketStatusProcessing, model.TicketStatusNeedSupplement},
+				olderThan).
+			Select("id").
+			Find(&tickets).Error; err != nil {
+			return err
+		}
+
+		if len(tickets) == 0 {
+			return nil
+		}
+
+		for _, t := range tickets {
+			closedIDs = append(closedIDs, t.ID)
+		}
+
+		// 批量关闭
+		if err := tx.Model(&model.Ticket{}).
+			Where("id IN ?", closedIDs).
+			Update("status", model.TicketStatusClosed).Error; err != nil {
+			return err
+		}
+
+		// 为每个关闭的 ticket 创建处理记录
+		now := time.Now()
+		for _, id := range closedIDs {
+			record := &model.TicketRecord{
+				TicketID:   id,
+				OperatorID: 0, // 0 表示系统自动操作
+				Action:     "auto_close",
+				Content:    "系统自动关闭：申告超过 7 天未处理",
+				CreatedAt:  now,
+			}
+			if err := tx.Create(record).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	return int64(len(closedIDs)), err
 }
 
 // =============================================================================

@@ -15,6 +15,8 @@ import (
 	"opsmind/internal/model"
 	"opsmind/internal/repository"
 	"opsmind/pkg/errcode"
+
+	"gorm.io/gorm"
 )
 
 // =============================================================================
@@ -76,6 +78,7 @@ type llmConfigRepo interface {
 type LLMConfigService struct {
 	repo    llmConfigRepo
 	manager *LLMConfigManager
+	db      *gorm.DB // 非 nil 时提供事务支持（mock 无 DB 时为空）
 }
 
 // NewLLMConfigService 创建 LLMConfigService 实例。
@@ -87,10 +90,11 @@ func NewLLMConfigService(repo interface{}) *LLMConfigService {
 		manager: NewLLMConfigManager(),
 	}
 
-	// 适配不同的仓库类型
+	// 适配不同的仓库类型，同时提取 DB 引用用于事务支持
 	switch r := repo.(type) {
 	case *repository.LlmConfigRepo:
 		svc.repo = r
+		svc.db = r.DB()
 	case llmConfigRepo:
 		svc.repo = r
 	default:
@@ -122,13 +126,6 @@ func (s *LLMConfigService) CreateConfig(name string, providerType int16, baseURL
 		return AppError{Code: errcode.ErrParam, Message: "名称不能为空"}
 	}
 
-	// TODO: ClearDefault + Create 不在同一事务中 — 若 Create 失败，默认配置已被清空。
-	if isDefault {
-		if err := s.repo.ClearDefault(); err != nil {
-			return AppError{Code: errcode.ErrUnknown, Message: "清空默认配置失败"}
-		}
-	}
-
 	cfg := &model.LlmConfig{
 		Name:             name,
 		ProviderType:     providerType,
@@ -142,8 +139,26 @@ func (s *LLMConfigService) CreateConfig(name string, providerType int16, baseURL
 		IsDefault:        isDefault,
 	}
 
-	if err := s.repo.Create(cfg); err != nil {
-		return AppError{Code: errcode.ErrUnknown, Message: "创建 LLM 配置失败"}
+	// ClearDefault + Create 包裹在事务中，保证默认配置唯一性约束不被破坏
+	if s.db != nil && isDefault {
+		err := s.db.Transaction(func(tx *gorm.DB) error {
+			if err := s.repo.ClearDefault(); err != nil {
+				return AppError{Code: errcode.ErrUnknown, Message: "清空默认配置失败"}
+			}
+			return s.repo.Create(cfg)
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+		if isDefault {
+			if err := s.repo.ClearDefault(); err != nil {
+				return AppError{Code: errcode.ErrUnknown, Message: "清空默认配置失败"}
+			}
+		}
+		if err := s.repo.Create(cfg); err != nil {
+			return AppError{Code: errcode.ErrUnknown, Message: "创建 LLM 配置失败"}
+		}
 	}
 
 	// 新默认配置立即生效
@@ -158,15 +173,26 @@ func (s *LLMConfigService) CreateConfig(name string, providerType int16, baseURL
 //
 // 更新为默认时先清空其他默认，更新后立即热替换。
 func (s *LLMConfigService) UpdateConfig(cfg *model.LlmConfig) error {
-	// TODO: ClearDefault + Update 不在同一事务中 — 同上。
-	if cfg.IsDefault {
-		if err := s.repo.ClearDefault(); err != nil {
-			return AppError{Code: errcode.ErrUnknown, Message: "清空默认配置失败"}
+	// ClearDefault + Update 包裹在事务中
+	if s.db != nil && cfg.IsDefault {
+		err := s.db.Transaction(func(tx *gorm.DB) error {
+			if err := s.repo.ClearDefault(); err != nil {
+				return AppError{Code: errcode.ErrUnknown, Message: "清空默认配置失败"}
+			}
+			return s.repo.Update(cfg)
+		})
+		if err != nil {
+			return err
 		}
-	}
-
-	if err := s.repo.Update(cfg); err != nil {
-		return AppError{Code: errcode.ErrUnknown, Message: "更新 LLM 配置失败"}
+	} else {
+		if cfg.IsDefault {
+			if err := s.repo.ClearDefault(); err != nil {
+				return AppError{Code: errcode.ErrUnknown, Message: "清空默认配置失败"}
+			}
+		}
+		if err := s.repo.Update(cfg); err != nil {
+			return AppError{Code: errcode.ErrUnknown, Message: "更新 LLM 配置失败"}
+		}
 	}
 
 	// 更新后立即热替换

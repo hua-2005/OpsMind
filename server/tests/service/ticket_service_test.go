@@ -81,7 +81,7 @@ func TestTicketService_CreateTicket(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_create")
 
 	req := request.CreateTicketRequest{
@@ -127,7 +127,7 @@ func TestTicketService_CreateTicket_Validation(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_val")
 
 	// 标题为空
@@ -163,7 +163,7 @@ func TestTicketService_SupplementTicket(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_supp")
 
 	// 创建申告并设置为"需补充信息"状态
@@ -205,7 +205,7 @@ func TestTicketService_SupplementTicket_WrongStatus(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_supp_ws")
 
 	// 创建待处理状态的申告（不是"需补充信息"）
@@ -227,7 +227,7 @@ func TestTicketService_SupplementTicket_NotOwner(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	owner := createTestUserForService(t, db, "tsvc_supp_owner")
 	other := createTestUserForService(t, db, "tsvc_supp_other")
 
@@ -253,7 +253,7 @@ func TestTicketService_UpdateStatus_Start(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_start")
 	operator := createTestUserForService(t, db, "tsvc_start_op")
 
@@ -290,7 +290,7 @@ func TestTicketService_UpdateStatus_RequestInfo(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_reqinfo")
 	operator := createTestUserForService(t, db, "tsvc_reqinfo_op")
 
@@ -322,7 +322,7 @@ func TestTicketService_UpdateStatus_RequestInfoExceeded(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_exceed")
 	operator := createTestUserForService(t, db, "tsvc_exceed_op")
 
@@ -343,11 +343,52 @@ func TestTicketService_UpdateStatus_RequestInfoExceeded(t *testing.T) {
 	}
 }
 
+// TestTicketService_UpdateStatus_RequestInfoAtomicCheck 验证补充次数上限由数据库原子检查保证。
+//
+// 修复前：Service 层读取 supplement_count 后判断 >= 3，存在 TOCTOU 竞态条件。
+// 修复后：IncrementSupplementCount 使用 WHERE supplement_count < 3 的原子 UPDATE，
+// 即使并发请求也能正确拒绝超限操作。
+func TestTicketService_UpdateStatus_RequestInfoAtomicCheck(t *testing.T) {
+	db := setupTicketServiceDB(t)
+	cleanTicketServiceTables(t, db)
+	repo := repository.NewTicketRepo(db)
+	svc := service.NewTicketService(repo, db)
+	user := createTestUserForService(t, db, "tsvc_atomic")
+	operator := createTestUserForService(t, db, "tsvc_atomic_op")
+
+	// supplement_count=3 时，原子 UPDATE 不应生效
+	ticket := &model.Ticket{
+		TicketNo: fmt.Sprintf("TK-ATOM-%d", time.Now().UnixNano()),
+		UserID: user.ID, Title: "原子检查测试", Description: "描述",
+		Urgency: 1, ContactPhone: "x", Status: 2, Source: 1,
+		SupplementCount: 3,
+	}
+	requireNoErr(t, db.Create(ticket).Error)
+
+	err := svc.UpdateStatus(ticket.ID, operator.ID, request.UpdateTicketStatusRequest{
+		Action: "request_info",
+		Result: "应被拒绝的补充请求",
+	})
+	if err == nil {
+		t.Fatal("supplement_count=3 时 request_info 应返回错误")
+	}
+
+	// 验证 supplement_count 未被错误自增
+	var updated model.Ticket
+	db.First(&updated, ticket.ID)
+	if updated.SupplementCount != 3 {
+		t.Errorf("supplement_count 应保持 3, 实际 %d — 原子检查失效", updated.SupplementCount)
+	}
+	if updated.Status != 2 {
+		t.Errorf("status 应保持 2(处理中), 实际 %d", updated.Status)
+	}
+}
+
 func TestTicketService_UpdateStatus_Resolve(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_resolve")
 	operator := createTestUserForService(t, db, "tsvc_resolve_op")
 
@@ -375,7 +416,7 @@ func TestTicketService_UpdateStatus_Close(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_close")
 	operator := createTestUserForService(t, db, "tsvc_close_op")
 
@@ -403,7 +444,7 @@ func TestTicketService_UpdateStatus_InvalidAction(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_invact")
 	operator := createTestUserForService(t, db, "tsvc_invact_op")
 
@@ -425,7 +466,7 @@ func TestTicketService_UpdateStatus_WrongPreStatus(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_wps")
 	operator := createTestUserForService(t, db, "tsvc_wps_op")
 
@@ -452,7 +493,7 @@ func TestTicketService_AddRecord(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_record")
 	operator := createTestUserForService(t, db, "tsvc_record_op")
 
@@ -492,7 +533,7 @@ func TestTicketService_ListByUser(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_listbyuser")
 
 	for i := 0; i < 3; i++ {
@@ -519,7 +560,7 @@ func TestTicketService_ListAll(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_listall")
 
 	tickets := []model.Ticket{
@@ -567,7 +608,7 @@ func TestTicketService_GetDetail(t *testing.T) {
 	db := setupTicketServiceDB(t)
 	cleanTicketServiceTables(t, db)
 	repo := repository.NewTicketRepo(db)
-	svc := service.NewTicketService(repo)
+	svc := service.NewTicketService(repo, db)
 	user := createTestUserForService(t, db, "tsvc_detail")
 
 	ticket := &model.Ticket{

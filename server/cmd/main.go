@@ -98,7 +98,7 @@ func main() {
 	authService := service.NewAuthService(userRepo, db)
 	userService := service.NewUserService(userRepo, db)
 	roleService := service.NewRoleService(roleRepo, userRepo, db)
-	ticketService := service.NewTicketService(ticketRepo)
+	ticketService := service.NewTicketService(ticketRepo, db)
 	messageService := service.NewMessageService(messageRepo)
 	dashboardService := service.NewDashboardService(db)
 	configService := service.NewConfigService(configRepo)
