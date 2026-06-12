@@ -70,7 +70,6 @@
 <script setup lang="ts">
 // TODO(admin/SystemConfig): 与 ModelConfig 页面管理完全相同的配置项（ai.default_top_k / ai.confidence_threshold），
 //                         修改一个不会同步到另一个 — 应合并为统一的 AI 配置入口或共享配置读写逻辑。
-// TODO(admin/SystemConfig): toast 定时器未在 onUnmounted 清理 — 存在内存泄漏。
 import { ref, onMounted, watch } from 'vue'
 import { useAIConfig } from '@/composables/useAIConfig'
 import { useToast } from '@/composables/useToast'
@@ -90,8 +89,7 @@ const editingKey = ref('')
 const editValue = ref<any>('')
 const loading = aiConfig.loading
 
-// 可配置的系统配置项
-const KNOWN_KEYS = ['ai.default_top_k', 'ai.confidence_threshold']
+// 可配置的系统配置项（后续从 API 动态获取）
 
 onMounted(async () => {
   await aiConfig.loadConfig(getConfig)

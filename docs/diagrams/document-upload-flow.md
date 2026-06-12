@@ -57,12 +57,12 @@ sequenceDiagram
 
     Note over KS: === 5. 入队异步处理 ===
     KS->>PR: Submit(task)
-    PR->>PR: 非阻塞: select { case ch <- task: ok; default: return err }
+    PR->>PR: 非阻塞 select: ch 接收 task 则 ok, default 返回 err
     PR-->>KS: nil / err
 
     KS-->>KH: *KnowledgeArticle{ID, Status}
 
-    KH-->>U: 200 {message: "文档已接收，正在后台处理", article_id, filename}
+    KH-->>U: 200 {message: 文档已接收，正在后台处理, article_id, filename}
 ```
 
 ## 2. 后台处理器

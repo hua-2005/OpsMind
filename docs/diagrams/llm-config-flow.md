@@ -90,7 +90,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    Create[CreateConfig<br/>apiKey = "sk-abc123..."] --> Save[LlmConfigRepo.Create<br/>明文写入 DB]
+    Create["CreateConfig<br/>apiKey = sk-abc123..."] --> Save["LlmConfigRepo.Create<br/>明文写入 DB"]
     List[ListConfigs<br/>LlmConfigRepo.List] --> Marshal[LlmConfigResponse.MarshalJSON]
     Marshal --> Mask{"len(apiKey) > 8?"}
     Mask -->|Yes| Masked["sk-ab****23<br/>(前4+后4, 中间***)"]

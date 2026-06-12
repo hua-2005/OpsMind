@@ -4,7 +4,7 @@
  * 验证 401 响应拦截器包含防循环保护：
  * 若用户当前已在 /login 页面，收到 401 时不应再次跳转 /login。
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 // 被测试的 401 处理逻辑（提取为纯函数）
 function shouldRedirectToLogin(currentPath: string): boolean {

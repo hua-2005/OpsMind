@@ -7,7 +7,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import Pagination from '../Pagination.vue'
-import { NPagination } from 'naive-ui'
 
 // Mock Naive UI Pagination 避免实际渲染
 vi.mock('naive-ui', () => ({

@@ -3,7 +3,7 @@
  *
  * 验证 403 toast 通知和全局 loading 计数器逻辑。
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // =============================================================================
 // 全局 loading 计数器

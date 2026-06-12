@@ -54,7 +54,7 @@ describe('chat store', () => {
   describe('actions', () => {
     it('clearSession should reset all state', () => {
       const store = useChatStore()
-      store.messages.push({ role: 'user', content: 'test' })
+      store.messages.push({ id: 'test-id', role: 'user', content: 'test' })
       store.currentStep = '混合检索'
       store.pipelineMetrics = { steps: [], total_duration_ms: 100 }
 

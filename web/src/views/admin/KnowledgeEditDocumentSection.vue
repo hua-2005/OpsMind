@@ -71,16 +71,16 @@ function handleFilesChange(e: Event) {
   const input = e.target as HTMLInputElement
   if (input.files) {
     // emit update event — parent handles the logic
-    const files = Array.from(input.files)
+    Array.from(input.files)
     // We can't directly modify props, but we signal the parent
   }
 }
 
-function handleDrop(e: DragEvent) {
+function handleDrop(_e: DragEvent) {
   // Parent handles via v-model sync
 }
 
-function removeFile(index: number) {
+function removeFile(_index: number) {
   // Parent handles
 }
 

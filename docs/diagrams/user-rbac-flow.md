@@ -173,7 +173,7 @@ erDiagram
         bigint id PK
         varchar name UK
         varchar description
-        jsonb permissions "[\"ticket.read\", \"user.manage\"]"
+        jsonb permissions "ticket.read, user.manage 等权限"
     }
 
     USER_ROLES {

@@ -51,7 +51,7 @@
           </thead>
           <tbody>
             <tr v-for="a in articles" :key="a.id">
-              <td class="title-cell" @click="goEdit(a.id)">{{ a.title || a.question || '-' }}</td>
+              <td class="title-cell" @click="goEdit(a.id)">{{ a.title || '-' }}</td>
               <td><span class="source-icon">{{ sourceIcon(a.source_type) }}</span></td>
               <td>{{ a.category || '-' }}</td>
               <td><span :class="['status-tag', statusClass(a.status)]">{{ statusText(a.status) }}</span></td>
@@ -98,7 +98,6 @@
 </template>
 
 <script setup lang="ts">
-// TODO(admin/KnowledgeList): 使用相对路径 import（../../api/knowledge）与其他文件 @/api/knowledge 不一致。
 // TODO(admin/KnowledgeList): statusClass/statusText/processClass/processText 与 KnowledgeEdit 重复 — 应提取到 utils/knowledge.ts。
 // TODO(admin/KnowledgeList): API 错误仅 console.error，无用户可见提示。
 // TODO(admin/KnowledgeList): 使用 (res.data as any) 强制类型转换 — 等 API 泛型补全后移除。
@@ -109,7 +108,7 @@ import { listKnowledgeBases, createKnowledgeBase, listArticles, submitReview, pu
 
 interface KB { id: number; name: string }
 // v2: 统一文章模型字段
-interface Article { id: number; title: string; question?: string; content: string; category: string; status: number; source_type: number; word_count: number; process_status: number; updated_at: string }
+interface Article { id: number; title: string; question?: string; content: string; category?: string; status: number; source_type: number; word_count?: number; process_status?: number; updated_at?: string }
 
 const router = useRouter()
 const kbList = ref<KB[]>([])
@@ -136,7 +135,7 @@ const fetchArticles = async () => {
     if (statusFilter.value !== -1) params.status = statusFilter.value
     if (sourceTypeFilter.value !== -1) params.source_type = sourceTypeFilter.value
     const res = await listArticles(selectedKB.value.id, params)
-    const list = Array.isArray(res.data) ? res.data : (res.data.articles || [])
+    const list = Array.isArray(res.data) ? res.data : (res.data.items || [])
     articles.value = list; total.value = res.data.total || list.length || 0
   } catch (e) { console.error(e) }
 }
@@ -156,18 +155,19 @@ const handleRetryDocument = async (id: number) => {
 
 // v2 辅助函数
 const sourceIcon = (t: number) => { const m: Record<number,string> = { 1:'✍️',2:'📄' }; return m[t]||'❓' }
-const processClass = (s: number) => {
+const processClass = (s: number | undefined) => {
   const m: Record<number,string> = { 1:'pending',2:'pending',3:'pending',4:'completed',5:'failed' }
-  return m[s]||''
+  return s !== undefined ? (m[s]||'') : ''
 }
-const processText = (s: number) => {
+const processText = (s: number | undefined) => {
+  if (s === undefined) return '-'
   const m: Record<number,string> = { 0:'待处理',1:'解析中',2:'分块中',3:'向量化中',4:'已完成',5:'失败' }
   return m[s]||'-'
 }
 
 const statusClass = (s: number) => { const m: Record<number,string> = { '-1':'disabled',0:'disabled',1:'draft',2:'pending',3:'approved',4:'published',5:'rejected' }; return m[s]||'' }
 const statusText = (s: number) => { const m: Record<number,string> = { '-1':'已停用',0:'已停用',1:'草稿',2:'待审核',3:'已通过',4:'已发布',5:'已驳回' }; return m[s]||'未知' }
-const formatTime = (t: string) => t ? new Date(t).toLocaleString('zh-CN') : '-'
+const formatTime = (t?: string) => t ? new Date(t).toLocaleString('zh-CN') : '-'
 </script>
 
 <style scoped>

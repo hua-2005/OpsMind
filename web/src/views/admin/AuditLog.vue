@@ -25,8 +25,7 @@
 </template>
 
 <script setup lang="ts">
-// TODO(admin/AuditLog): catch 块静默忽略所有错误（/* ignore */），API 调用失败时用户无任何提示。
-//                      应展示错误提示并记录到 console.error。
+// TODO(admin/AuditLog): 缺少用户可见的错误提示 — 加载失败时仅 console.error，用户无感知。
 // TODO(admin/AuditLog): 使用 (res as any) 绕过类型检查 — 应使用审计日志 API 模块的泛型声明。
 // TODO(admin/AuditLog): page 和 page_size 硬编码 — 应支持分页参数。
 import { ref, onMounted } from 'vue'

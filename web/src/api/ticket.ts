@@ -2,7 +2,7 @@
  * 申告 API 封装（门户端）— 全部端点已补全 ApiResponse&lt;T&gt; 泛型类型。
  */
 import request from '@/utils/request'
-import type { ApiResponse, PageResponse } from '@/types/api'
+import type { ApiResponse } from '@/types/api'
 
 // =============================================================================
 // 类型定义

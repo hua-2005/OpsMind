@@ -83,6 +83,7 @@ interface KnowledgeArticleItem {
   tags?: string[]
   status: number
   process_status?: number
+  process_error?: string
   created_at?: string
   updated_at?: string
 }

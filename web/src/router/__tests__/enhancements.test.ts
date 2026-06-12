@@ -3,7 +3,7 @@
  *
  * 验证 scrollBehavior 和 JWT 过期检查逻辑。
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 // =============================================================================
 // JWT 过期检查（提取为纯函数）

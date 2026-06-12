@@ -8,7 +8,6 @@
  *                 2) 无 401/403 统一处理
  *                 3) 无超时控制（fetch 不支持 timeout）
  *                 应评估是否可改用 axios（需确认 SSE 流式兼容性）。
- * TODO(api/chat): catch 子句中 err 类型为 any — 应改为 unknown + 类型守卫 (err instanceof Error)。
  */
 import request from '@/utils/request'
 import type { ApiResponse } from '@/types/api'

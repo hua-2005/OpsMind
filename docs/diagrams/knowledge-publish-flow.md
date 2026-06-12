@@ -97,14 +97,14 @@ sequenceDiagram
     KS->>KS: embeddingModel = article.KnowledgeBase.EmbeddingModel
     Note over KS: 注意：从 KB 读取，不再硬编码 "bge-m3"
     KS->>CH: Split(article.Answer)
-    CH->>CH: chunkSize > 0 校验; 默认 1000
-    CH->>CH: chunkOverlap > 0 校验
+    CH->>CH: 校验 chunkSize 大于 0, 默认 1000
+    CH->>CH: 校验 chunkOverlap 大于 0
     CH-->>KS: []string chunks
 
     Note over KS,DB: === 3. Embedding ===
     KS->>EM: Embed(ctx, chunks)
     EM->>EC: CreateEmbeddings(ctx, EmbeddingRequest{Model: embeddingModel, Input: chunks})
-    EC->>EC: doHTTPRequest(ctx, baseURL, apiKey, "/v1/embeddings", body)
+    EC->>EC: doHTTPRequest(ctx, baseURL, apiKey, /v1/embeddings, body)
     Note over EC: 429/503 指数退避重试 (maxRetries=3)
     EC-->>EM: EmbeddingResponse{Embeddings [][]float32, Dimension}
     EM-->>KS: [][]float32 vectors

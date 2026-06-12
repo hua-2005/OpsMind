@@ -124,7 +124,7 @@
       <!-- 待上传文件列表 -->
       <div v-if="uploadFiles.length > 0" class="file-list">
         <div v-for="(f, i) in uploadFiles" :key="i" class="file-item">
-          <span :class="['file-icon', fileIconClass(f.name)]">{{ fileIconText(f.name) }}</span>
+          <span class="file-icon">{{ fileIconText(f.name) }}</span>
           <span class="file-name">{{ f.name }}</span>
           <span class="file-size">{{ formatFileSize(f.size) }}</span>
           <button class="file-remove" @click="removeFile(i)">×</button>
@@ -148,8 +148,6 @@
 
 <script setup lang="ts">
 // TODO(admin/KnowledgeEdit): 组件超过 400 行 — 应拆分为文档上传区域、元信息表单、处理状态展示等子组件。
-// TODO(admin/KnowledgeEdit): 使用相对路径 import（../../api/knowledge）与其他文件不一致。
-// TODO(admin/KnowledgeEdit): fileIconClass() 生成的 CSS class 无对应样式规则 — 属于死逻辑。
 // TODO(admin/KnowledgeEdit): fetchArticle/fetchKBs 失败时仅 console.error，无用户可见提示，无 loading 状态。
 // TODO(admin/KnowledgeEdit): processClass/processText/statusClass/statusText 与 KnowledgeList 重复 — 应提取到 utils/knowledge.ts。
 import { ref, computed, onMounted } from 'vue'
@@ -206,11 +204,10 @@ const fetchArticle = async () => {
   try {
     const res = await getArticleDetail(Number(articleId))
     article.value = res.data
-    // v2: 映射 title/content（兼容旧 question/answer 字段）
     form.value = {
       kb_id: res.data.kb_id,
-      title: res.data.title || res.data.question || '',
-      content: res.data.content || res.data.answer || '',
+      title: res.data.title || '',
+      content: res.data.content || '',
       category: res.data.category || '',
       tags: res.data.tags || [],
     }
@@ -296,10 +293,6 @@ async function handleUpload() {
   }
 }
 
-function fileIconClass(name: string) {
-  const ext = name.split('.').pop()?.toLowerCase()
-  return ext || ''
-}
 function fileIconText(name: string) {
   const ext = name.split('.').pop()?.toLowerCase()
   const icons: Record<string, string> = { pdf: '📕', docx: '📘', md: '📝', txt: '📄' }

@@ -5,8 +5,8 @@
  * （ai.default_top_k / ai.confidence_threshold），但互相不同步。
  * 提取共享 composable useAIConfig 消除重复并保证数据一致性。
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { ref, nextTick } from 'vue'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { ref } from 'vue'
 
 // 被测试的共享配置逻辑（提取为纯函数）
 interface AIConfigState {

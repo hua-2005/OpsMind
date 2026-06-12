@@ -6,7 +6,7 @@
  * 2. 验证 token 缺失时跳转登录页
  * 3. 验证角色不匹配时拒绝访问
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 // 被测试的守卫逻辑（提取为纯函数，便于单元测试）
 function checkRouteAccess(params: {

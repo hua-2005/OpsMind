@@ -70,6 +70,7 @@ export const useChatStore = defineStore('chat', () => {
 
     // 添加 AI 消息占位（流式填充）
     const aiMsgId = crypto.randomUUID()
+    const aiMsgIndex = messages.value.length
     messages.value.push({
       id: aiMsgId,
       role: 'assistant',
