@@ -74,6 +74,7 @@ import {
   PeopleOutline, KeyOutline, SettingsOutline,
   MenuOutline, SunnyOutline, MoonOutline,
   PersonOutline, NotificationsOutline,
+  DocumentTextOutline, CogOutline,
 } from '@vicons/ionicons5'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
@@ -94,22 +95,23 @@ function renderIcon(icon: Component) {
 }
 
 // 菜单选项
-const menuOptions = computed(() => {
-  // TODO(layout/AdminLayout): 菜单仍是前端硬编码，登录接口已经返回 menus。
-  // 应根据 authStore.menus 渲染，才能真正支持后台动态菜单和按钮权限。
-  const items: any[] = [
-    { label: '数据看板', key: '/admin/dashboard', icon: renderIcon(GridOutline) },
-    { label: '申告管理', key: '/admin/tickets', icon: renderIcon(TicketOutline) },
-    { label: '知识库', key: '/admin/knowledge', icon: renderIcon(BookOutline) },
-    { label: '用户管理', key: '/admin/users', icon: renderIcon(PeopleOutline) },
-    { label: '角色管理', key: '/admin/roles', icon: renderIcon(KeyOutline) },
-  ]
-  // 仅系统管理员可见系统配置入口
-  if (authStore.hasPermission('system:config')) {
-    items.push({ label: '系统配置', key: '/admin/config', icon: renderIcon(SettingsOutline) })
-  }
-  return items
-})
+  const menuOptions = computed(() => {
+    const items: any[] = [
+      { label: '数据看板', key: '/admin/dashboard', icon: renderIcon(GridOutline) },
+      { label: '申告管理', key: '/admin/tickets', icon: renderIcon(TicketOutline) },
+      { label: '知识库', key: '/admin/knowledge', icon: renderIcon(BookOutline) },
+      { label: '用户管理', key: '/admin/users', icon: renderIcon(PeopleOutline) },
+      { label: '角色管理', key: '/admin/roles', icon: renderIcon(KeyOutline) },
+    ]
+    if (authStore.hasPermission('system:config')) {
+      items.push(
+        { label: 'LLM 配置', key: '/admin/llm-config', icon: renderIcon(CogOutline) },
+        { label: '审计日志', key: '/admin/audit-logs', icon: renderIcon(DocumentTextOutline) },
+        { label: '系统配置', key: '/admin/config', icon: renderIcon(SettingsOutline) },
+      )
+    }
+    return items
+  })
 
 // 当前激活菜单项
 const activeMenu = computed(() => {

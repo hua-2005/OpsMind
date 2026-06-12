@@ -6,30 +6,49 @@
  */
 
 const TOKEN_KEY = 'opsmind_token'
-// TODO(web/auth): 只保存 access_token，refresh_token 没有持久化和自动刷新流程。
-// access token 过期后用户会直接回登录页，体验和后端双令牌设计不匹配。
-// TODO(web/auth): localStorage 容易受 XSS 影响。
-// 若威胁模型要求更高，可评估 httpOnly cookie 或至少缩短 token 生命周期并加强 CSP。
+const USER_KEY = 'opsmind_user'
+
+import type { MenuItem } from '@/types/menu'
+
+interface StoredUserInfo {
+  user: { id: number; username: string; real_name: string; phone: string; email: string; first_login: boolean }
+  roles: string[]
+  permissions: string[]
+  menus: MenuItem[]
+}
 
 /**
  * 获取存储的 token
- * @returns token 字符串，不存在时返回 null
  */
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
 }
 
-/**
- * 存储 token
- * @param token JWT token 字符串
- */
 export function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token)
 }
 
-/**
- * 移除存储的 token
- */
 export function removeToken(): void {
   localStorage.removeItem(TOKEN_KEY)
+}
+
+/**
+ * 持久化用户信息快照，用于页面刷新后恢复角色/权限/菜单。
+ * 避免路由守卫因 Pinia 状态丢失而误判权限。
+ */
+export function getUserInfo(): StoredUserInfo | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+export function setUserInfo(data: StoredUserInfo): void {
+  localStorage.setItem(USER_KEY, JSON.stringify(data))
+}
+
+export function removeUserInfo(): void {
+  localStorage.removeItem(USER_KEY)
 }

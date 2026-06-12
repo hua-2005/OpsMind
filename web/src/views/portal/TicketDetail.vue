@@ -125,8 +125,6 @@ onMounted(async () => {
 
 async function handleSupplement() {
   if (!supplementContent.value.trim()) return
-  // TODO(portal/TicketDetail): 补充信息接口当前前端使用 POST，后端注册 PATCH。
-  // 修正 api/ticket.ts 后，这里应同步处理 405/404 的历史兼容提示。
   supplementError.value = ''
   supplementSuccess.value = false
   submitting.value = true

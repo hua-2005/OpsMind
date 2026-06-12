@@ -19,9 +19,7 @@ import { getToken } from '../utils/auth'
 
 /** v2 RAG 管道步骤事件 */
 export interface StepEvent {
-  // TODO(api/chat): 后端 SSE step 事件字段是 id/label，前端这里定义 step_id。
-  // 需要统一字段名，否则 currentStep 能显示但 pipeline metrics 对不上。
-  step_id: string
+  id: string
   label: string
   duration_ms?: number
 }
@@ -58,10 +56,8 @@ export interface ChatSessionResponse {
   feedback: number
   created_at: string
   /** v2: RAG 管道执行指标（由 done 事件的 metadata 携带） */
-  // TODO(api/chat): 后端文档字段名是 pipeline，store 读取 pipeline_metrics。
-  // 需要统一为一个字段，减少 done metadata 的兼容转换。
-  pipeline_metrics?: {
-    steps: Array<{ step_id: string; label: string; duration_ms: number; success: boolean }>
+  pipeline?: {
+    steps: Array<{ id: string; label: string; duration_ms: number; success: boolean }>
     total_duration_ms: number
   }
 }
@@ -150,10 +146,7 @@ export async function streamChatSession(
           if (event.type === 'token') {
             callbacks.onToken(event.content)
           } else if (event.type === 'step') {
-            // v2: RAG 管道步骤事件
-            // TODO(api/chat): 这里读取 event.step_id，但后端 writeSSEEvent 输出字段为 id。
-            // 应兼容 id 或修正后端字段，避免步骤 ID 丢失。
-            callbacks.onStep?.({ step_id: event.step_id, label: event.label, duration_ms: event.duration_ms })
+            callbacks.onStep?.({ id: event.id, label: event.label, duration_ms: event.duration_ms })
           } else if (event.type === 'done') {
             callbacks.onDone(event.metadata as ChatSessionResponse)
           }

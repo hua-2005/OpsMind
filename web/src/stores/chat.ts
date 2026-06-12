@@ -21,7 +21,7 @@ import {
 
 /** RAG 管道执行指标 */
 export interface PipelineMetrics {
-  steps: Array<{ step_id: string; label: string; duration_ms: number; success: boolean }>
+  steps: Array<{ id: string; label: string; duration_ms: number; success: boolean }>
   total_duration_ms: number
 }
 
@@ -113,8 +113,8 @@ export const useChatStore = defineStore('chat', () => {
           loading.value = false
           streaming.value = false
           // v2: 管道指标由 metadata 携带（如果后端支持）
-          if (session.pipeline_metrics) {
-            pipelineMetrics.value = session.pipeline_metrics
+          if (session.pipeline) {
+            pipelineMetrics.value = session.pipeline
           }
         },
         onError(error: string) {
@@ -139,7 +139,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!currentSession.value) return
     try {
       await submitFeedbackApi(currentSession.value.session_id, feedback)
-      // TODO(store/chat): 成功后应更新 currentSession.feedback，避免用户可重复点击且 UI 不反馈状态。
+      currentSession.value.feedback = feedback
     } catch (err) {
       console.error('提交反馈失败', err)
     }

@@ -49,7 +49,7 @@
           {{ chatStore.currentStep }}
         </div>
         <div v-if="chatStore.pipelineMetrics" class="step-metrics">
-          <span v-for="s in chatStore.pipelineMetrics.steps" :key="s.step_id" :class="['step-badge', s.success ? 'done' : 'failed']">
+          <span v-for="s in chatStore.pipelineMetrics.steps" :key="s.id" :class="['step-badge', s.success ? 'done' : 'failed']">
             {{ s.label }} {{ s.duration_ms }}ms
           </span>
         </div>
@@ -99,7 +99,7 @@
       </div>
 
       <!-- 反馈区域 -->
-      <div v-if="chatStore.currentSession && !chatStore.currentSession.can_submit_ticket" class="feedback-area">
+      <div v-if="chatStore.currentSession && !chatStore.currentSession.can_submit_ticket && !chatStore.currentSession.feedback" class="feedback-area">
         <span class="feedback-label">这个回答对您有帮助吗？</span>
         <button class="btn-feedback" @click="handleFeedback(1)">已解决</button>
         <button class="btn-feedback btn-feedback--no" @click="handleFeedback(2)">未解决</button>
