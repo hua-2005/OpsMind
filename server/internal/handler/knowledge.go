@@ -90,9 +90,7 @@ func (h *KnowledgeHandler) ListKBs(c *gin.Context) {
 		return
 	}
 
-	// TODO: gin.H{"items": kbs} 包裹格式不一致 — 其他列表端点直接返回数组。
-	// 应改为 response.Success(c, kbs) 与 ListMenus/ListUsers 对齐。
-	response.Success(c, gin.H{"items": kbs})
+	response.Success(c, kbs)
 }
 
 // =============================================================================

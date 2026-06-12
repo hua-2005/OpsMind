@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"opsmind/internal/adapter"
 	"opsmind/internal/dto/request"
@@ -75,12 +74,17 @@ func (h *ChatHandler) SubmitFeedback(c *gin.Context) {
 	}
 
 	// 解析反馈值（int16: 0=未评价, 1=已解决, 2=未解决）
-	// TODO: 缺少反馈值范围校验 — 任意 int16 都能通过，应限制为 0/1/2。
 	var body struct {
 		Feedback int16 `json:"feedback"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, errcode.ErrParam, "参数校验失败: "+err.Error())
+		return
+	}
+
+	// 校验反馈值范围（仅允许 0/1/2）
+	if body.Feedback < 0 || body.Feedback > 2 {
+		response.Error(c, errcode.ErrParam, "反馈值无效，仅允许 0（未评价）、1（已解决）、2（未解决）")
 		return
 	}
 
@@ -115,6 +119,25 @@ func (h *ChatHandler) GetChatDetail(c *gin.Context) {
 // =============================================================================
 // SSE 流式输出
 // =============================================================================
+
+// sseEvent SSE 事件负载结构，用于 json.Marshal 安全构建 JSON。
+type sseEvent struct {
+	Type    string `json:"type"`
+	Content string `json:"content,omitempty"`
+}
+
+// writeSSEEvent 使用 json.Marshal 构建并发送 SSE 事件。
+//
+// 为什么不用字符串拼接：json.Marshal 自动处理 \t、Unicode 控制字符等转义，
+// 彻底消除手动 escapeSSE 的安全隐患。
+func writeSSEEvent(w gin.ResponseWriter, evt sseEvent) error {
+	data, err := json.Marshal(evt)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "data: %s\n\n", string(data))
+	return err
+}
 
 // StreamChatSession 创建问答会话并以 SSE 流式返回答案。
 //
@@ -173,7 +196,7 @@ func (h *ChatHandler) StreamChatSession(c *gin.Context) {
 	// 发送完成事件（含完整元数据）
 	metadataJSON, merr := json.Marshal(resp)
 	if merr != nil {
-		fmt.Fprintf(c.Writer, "data: {\"type\":\"done\",\"session_id\":%d}\n\n", resp.SessionID)
+		writeSSEEvent(c.Writer, sseEvent{Type: "done"})
 	} else {
 		fmt.Fprintf(c.Writer, "data: {\"type\":\"done\",\"metadata\":%s}\n\n", string(metadataJSON))
 	}
@@ -206,7 +229,7 @@ func (h *ChatHandler) streamWithLLM(c *gin.Context, flusher http.Flusher, fallba
 		if chunk.Error != nil || chunk.Content == "" {
 			continue
 		}
-		fmt.Fprintf(c.Writer, "data: {\"type\":\"token\",\"content\":\"%s\"}\n\n", escapeSSE(chunk.Content))
+		writeSSEEvent(c.Writer, sseEvent{Type: "token", Content: chunk.Content})
 		flusher.Flush()
 		if chunk.FinishReason != "" {
 			break
@@ -215,7 +238,6 @@ func (h *ChatHandler) streamWithLLM(c *gin.Context, flusher http.Flusher, fallba
 }
 
 // streamSimulated 降级方案：将完整答案按 rune 分块模拟流式输出。
-// TODO: 同上 — 使用字符串拼接而非 json.Marshal 构建 SSE 事件，控制字符可能导致 JSON 畸形。
 func (h *ChatHandler) streamSimulated(c *gin.Context, flusher http.Flusher, answer string) {
 	runes := []rune(answer)
 	chunkSize := 5
@@ -229,19 +251,8 @@ func (h *ChatHandler) streamSimulated(c *gin.Context, flusher http.Flusher, answ
 		if end > len(runes) {
 			end = len(runes)
 		}
-		fmt.Fprintf(c.Writer, "data: {\"type\":\"token\",\"content\":\"%s\"}\n\n", escapeSSE(string(runes[i:end])))
+		writeSSEEvent(c.Writer, sseEvent{Type: "token", Content: string(runes[i:end])})
 		flusher.Flush()
 		time.Sleep(30 * time.Millisecond)
 	}
-}
-
-// escapeSSE 对 SSE 数据中的特殊字符进行转义。
-// TODO: 字符串拼接构建 JSON 不安全 — escapeSSE 不处理 \t、Unicode 控制字符等。
-// 应使用 json.Marshal 为每个 token 事件生成 payload，彻底消除手动转义需求。
-func escapeSSE(s string) string {
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, "\n", `\n`)
-	s = strings.ReplaceAll(s, "\r", `\r`)
-	return s
 }

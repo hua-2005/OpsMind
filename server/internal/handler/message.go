@@ -34,14 +34,8 @@ func NewMessageHandler(svc *service.MessageService) *MessageHandler {
 func (h *MessageHandler) ListMessages(c *gin.Context) {
 	userID, _ := getCurrentUserID(c)
 
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 50 {
-		pageSize = 10
-	}
+	// 使用共享分页辅助函数（上限 100，与其他端点对齐）
+	page, pageSize := parsePagination(c)
 
 	msgs, total, err := h.svc.ListMessages(userID, page, pageSize)
 	if err != nil {

@@ -64,10 +64,9 @@ func Setup(cfg *config.AppConfig, h *Handlers) *gin.Engine {
 	registerPublicRoutes(public, h)
 
 	// JWT 认证路由（需要登录但不需要 RBAC）— 修改密码和登出
-	// 为什么不在 public 组：ChangePassword handler 依赖 JWT 中间件注入的 userID
-	// TODO: 与 public 组使用相同前缀 /api/v1/auth — 开发者可能误以为所有 /auth 路由无中间件。
-	// 应将受保护路由移至不同前缀（如 /api/v1/auth/me/）或使用注释明确区分。
-	authRequired := r.Group("/api/v1/auth")
+	// 使用独立前缀 /api/v1/auth/me 与公开路由 /api/v1/auth 明确区分，
+	// 避免开发者误以为所有 /auth 路由无中间件。
+	authRequired := r.Group("/api/v1/auth/me")
 	authRequired.Use(middleware.JWTAuth(cfg.JWT.Secret))
 	registerAuthRequiredRoutes(authRequired, h)
 
