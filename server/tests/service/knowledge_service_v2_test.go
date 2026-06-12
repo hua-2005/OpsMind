@@ -197,7 +197,7 @@ func TestKnowledgeV2_Disable(t *testing.T) {
 func TestKnowledgeV2_Enable(t *testing.T) {
 	repo := &mockKnowledgeRepoV2{
 		articles: map[int64]*model.KnowledgeArticle{
-			30: {ID: 30, KBID: 1, Question: "旧文档", Answer: "...", Status: 0}, // 已停用
+			30: {ID: 30, KBID: 1, Question: "旧文档", Answer: "...", Status: int16(model.ArticleStatusDisabled)}, // 已停用
 		},
 	}
 

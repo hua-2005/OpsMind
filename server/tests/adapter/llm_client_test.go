@@ -197,7 +197,6 @@ func TestChatCompletionStream_Success(t *testing.T) {
 	ch, err := client.ChatCompletionStream(context.Background(), adapter.ChatRequest{
 		Model:    "qwen3-4b",
 		Messages: []adapter.ChatMessage{{Role: "user", Content: "账号冻结怎么处理？"}},
-		Stream:   true,
 	})
 	if err != nil {
 		t.Fatalf("ChatCompletionStream 失败: %v", err)
@@ -244,7 +243,6 @@ func TestChatCompletionStream_ClientDisconnect(t *testing.T) {
 	ch, err := client.ChatCompletionStream(ctx, adapter.ChatRequest{
 		Model:  "qwen3-4b",
 		Messages: []adapter.ChatMessage{{Role: "user", Content: "test"}},
-		Stream: true,
 	})
 	if err != nil {
 		t.Fatalf("ChatCompletionStream 初始化失败: %v", err)
