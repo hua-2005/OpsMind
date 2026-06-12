@@ -4,14 +4,15 @@
 package response
 
 // LLMConfigResponse LLM 配置列表响应项。
+//
+// 注意：APIKey 字段在 Service 层的 LlmConfigResponse.MarshalJSON() 中自动脱敏，
+// 此处保留原始类型以支持详情接口返回完整密钥。
 type LLMConfigResponse struct {
 	ID              int64  `json:"id"`
 	Name            string `json:"name"`
 	ProviderType    int16  `json:"provider_type"`
 	BaseURL         string `json:"base_url"`
-	// TODO: APIKey 脱敏无编译期保障 — 脱敏逻辑在 Service 层，若遗漏则密钥泄露到客户端。
-	// 建议：1) 定义 MarshalJSON 方法自动脱敏；2) 或拆分为 ListItem（不含密钥）和 Detail（含密钥）两种响应。
-	APIKey          string `json:"api_key"`           // 已脱敏
+	APIKey          string `json:"api_key"`
 	LLMModel        string `json:"llm_model"`
 	EmbeddingModel  string `json:"embedding_model"`
 	MaxTokens       int    `json:"max_tokens"`

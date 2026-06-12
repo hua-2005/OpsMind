@@ -15,12 +15,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// CORS 返回 CORS 跨域中间件
-// TODO: AllowOrigins 硬编码为 localhost:5173 — 非本地环境需手动修改代码。
-// 应从配置读取（如 config.AppConfig.CORS.AllowOrigins），支持环境变量注入。
-func CORS() gin.HandlerFunc {
+// CORS 返回 CORS 跨域中间件。
+//
+// allowOrigins 从配置读取（如 OPSMIND_CORS_ALLOW_ORIGINS），支持环境变量注入。
+// 为空时默认使用 localhost:5173（本地开发环境）。
+func CORS(allowOrigins []string) gin.HandlerFunc {
+	if len(allowOrigins) == 0 {
+		allowOrigins = []string{"http://localhost:5173"}
+	}
+
 	return cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowOrigins:     allowOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
 		ExposeHeaders:    []string{"Content-Length"},

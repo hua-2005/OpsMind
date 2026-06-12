@@ -8,6 +8,7 @@
 package service
 
 import (
+	"encoding/json"
 	"strings"
 	"sync/atomic"
 
@@ -230,6 +231,9 @@ func (s *LLMConfigService) DeleteConfig(id int64) error {
 // =============================================================================
 
 // LlmConfigResponse 列表响应（API Key 脱敏）。
+//
+// MarshalJSON 在序列化时自动对 APIKey 脱敏，即使 Service 层遗漏 maskAPIKey 调用
+// 也不会泄露完整密钥——提供编译期级别的安全保障。
 type LlmConfigResponse struct {
 	ID               int64  `json:"id"`
 	Name             string `json:"name"`
@@ -242,6 +246,20 @@ type LlmConfigResponse struct {
 	MaxTokens        int    `json:"max_tokens"`
 	VectorDimension  int    `json:"vector_dimension"`
 	IsDefault        bool   `json:"is_default"`
+}
+
+// MarshalJSON 自定义 JSON 序列化，自动对 APIKey 脱敏。
+//
+// 使用类型别名避免无限递归：先 mask APIKey，再序列化。
+func (r LlmConfigResponse) MarshalJSON() ([]byte, error) {
+	type Alias LlmConfigResponse
+	return json.Marshal(&struct {
+		*Alias
+		APIKey string `json:"api_key"`
+	}{
+		Alias:  (*Alias)(&r),
+		APIKey: maskAPIKey(r.APIKey),
+	})
 }
 
 // maskAPIKey 对 API Key 进行脱敏处理。

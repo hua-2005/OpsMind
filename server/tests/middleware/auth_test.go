@@ -48,7 +48,7 @@ func setupAuthRouter() *gin.Engine {
 func TestJWTAuth_ValidToken(t *testing.T) {
 	r := setupAuthRouter()
 
-	token, err := pkgjwt.GenerateAccessToken(42, "testuser", []string{"admin"}, nil, nil, testSecret, time.Hour)
+	token, err := pkgjwt.GenerateAccessToken(42, "testuser", []string{"admin"}, nil, testSecret, time.Hour)
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
@@ -72,7 +72,7 @@ func TestJWTAuth_ExpiredToken(t *testing.T) {
 	r := setupAuthRouter()
 
 	// 生成已过期的令牌（-1 小时）
-	token, err := pkgjwt.GenerateAccessToken(42, "testuser", []string{"admin"}, nil, nil, testSecret, -1*time.Hour)
+	token, err := pkgjwt.GenerateAccessToken(42, "testuser", []string{"admin"}, nil, testSecret, -1*time.Hour)
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
@@ -106,7 +106,7 @@ func TestJWTAuth_MissingAuthorization(t *testing.T) {
 func TestJWTAuth_WrongFormat(t *testing.T) {
 	r := setupAuthRouter()
 
-	token, err := pkgjwt.GenerateAccessToken(42, "testuser", []string{"admin"}, nil, nil, testSecret, time.Hour)
+	token, err := pkgjwt.GenerateAccessToken(42, "testuser", []string{"admin"}, nil, testSecret, time.Hour)
 	require.NoError(t, err)
 
 	w := httptest.NewRecorder()
@@ -115,6 +115,28 @@ func TestJWTAuth_WrongFormat(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code, "无 Bearer 前缀应返回 401")
+}
+
+// TestJWTAuth_RefreshTokenRejected 验证刷新令牌被中间件拒绝。
+//
+// 双令牌安全模型要求 refresh token 只能用于 /auth/refresh 端点，
+// 不能当作 access token 用于业务 API 认证。
+func TestJWTAuth_RefreshTokenRejected(t *testing.T) {
+	r := setupAuthRouter()
+
+	token, err := pkgjwt.GenerateRefreshToken(42, "testuser", []string{"admin"}, nil, testSecret, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/v1/protected/me", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code, "refresh token 用于 API 认证应返回 401")
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, float64(10001), resp["code"])
 }
 
 // TestJWTAuth_InvalidToken 无效令牌字符串应返回 401。

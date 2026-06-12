@@ -60,11 +60,12 @@ func (s *MessageService) ListMessages(userID int64, page, pageSize int) ([]model
 	return s.repo.ListByUser(userID, page, pageSize)
 }
 
-// MarkAsRead 将消息标记为已读。
+// MarkAsRead 将指定用户的消息标记为已读。
 //
-// 消息不存在时返回 AppError{Code: ErrNotFound}，Handler 据此返回 404。
-func (s *MessageService) MarkAsRead(id int64) error {
-	if err := s.repo.MarkAsRead(id); err != nil {
+// 校验消息归属（userID），防止水平越权：用户 A 不能标记用户 B 的消息已读。
+// 消息不存在或不属于该用户时返回 AppError{Code: ErrNotFound}。
+func (s *MessageService) MarkAsRead(id int64, userID int64) error {
+	if err := s.repo.MarkAsRead(id, userID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return AppError{Code: errcode.ErrNotFound, Message: "消息不存在"}
 		}

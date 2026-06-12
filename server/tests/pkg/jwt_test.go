@@ -111,3 +111,40 @@ func TestParseTokenInvalidFormat(t *testing.T) {
 		t.Error("解析无效格式令牌应该返回错误")
 	}
 }
+
+// TestTokenType_AccessToken 验证访问令牌的 TokenType 为 "access"。
+//
+// 双令牌安全模型要求 access token 和 refresh token 在结构上可区分，
+// 中间件通过 TokenType 字段拒绝 refresh token 用于 API 认证。
+func TestTokenType_AccessToken(t *testing.T) {
+	token, err := jwt.GenerateAccessToken(1, "admin", []string{"admin"}, nil, testSecret, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("GenerateAccessToken 失败: %v", err)
+	}
+
+	claims, err := jwt.ParseToken(token, testSecret)
+	if err != nil {
+		t.Fatalf("ParseToken 失败: %v", err)
+	}
+
+	if claims.TokenType != "access" {
+		t.Errorf("Access Token 的 TokenType 应为 \"access\"，实际 %q", claims.TokenType)
+	}
+}
+
+// TestTokenType_RefreshToken 验证刷新令牌的 TokenType 为 "refresh"。
+func TestTokenType_RefreshToken(t *testing.T) {
+	token, err := jwt.GenerateRefreshToken(1, "admin", []string{"admin"}, nil, testSecret, 7*24*time.Hour)
+	if err != nil {
+		t.Fatalf("GenerateRefreshToken 失败: %v", err)
+	}
+
+	claims, err := jwt.ParseToken(token, testSecret)
+	if err != nil {
+		t.Fatalf("ParseToken 失败: %v", err)
+	}
+
+	if claims.TokenType != "refresh" {
+		t.Errorf("Refresh Token 的 TokenType 应为 \"refresh\"，实际 %q", claims.TokenType)
+	}
+}

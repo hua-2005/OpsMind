@@ -21,6 +21,15 @@ type AppConfig struct {
 	LLM       LLMConfig       `mapstructure:"llm"`
 	Embedding EmbeddingConfig `mapstructure:"embedding"`
 	AI        AIConfig        `mapstructure:"ai"`
+	CORS      CORSConfig      `mapstructure:"cors"`
+}
+
+// CORSConfig 是跨域资源共享配置。
+//
+// AllowOrigins 为逗号分隔的允许来源列表（如 "http://localhost:5173,https://opsmind.example.com"）。
+// 为空时默认使用 http://localhost:5173（本地开发环境）。
+type CORSConfig struct {
+	AllowOrigins string `mapstructure:"allow_origins"`
 }
 
 // ServerConfig 是 HTTP 服务器配置。
@@ -169,6 +178,9 @@ func bindEnvs(v *viper.Viper) {
 	// AI
 	v.BindEnv("ai.default_top_k", "OPSMIND_AI_DEFAULT_TOP_K")
 	v.BindEnv("ai.confidence_threshold", "OPSMIND_AI_CONFIDENCE_THRESHOLD")
+
+	// CORS
+	v.BindEnv("cors.allow_origins", "OPSMIND_CORS_ALLOW_ORIGINS")
 }
 
 // setDefaults 设置配置默认值，与 config.yaml 保持一致。
@@ -210,4 +222,7 @@ func setDefaults(v *viper.Viper) {
 	// AI
 	v.SetDefault("ai.default_top_k", 5)
 	v.SetDefault("ai.confidence_threshold", 0.6)
+
+	// CORS
+	v.SetDefault("cors.allow_origins", "http://localhost:5173")
 }

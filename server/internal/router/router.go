@@ -10,6 +10,7 @@ package router
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"opsmind/internal/config"
@@ -49,7 +50,7 @@ func Setup(cfg *config.AppConfig, h *Handlers) *gin.Engine {
 	// TODO: Recovery 应注册在最外层（第一个）以捕获所有中间件的 panic。
 	// 当前顺序 RequestID→CORS→Logger→Recovery 在风格上有违惯例。
 	r.Use(middleware.RequestID())
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(parseCORSOrigins(cfg.CORS.AllowOrigins)))
 	r.Use(middleware.Logger())
 	r.Use(gin.Recovery())
 
@@ -106,4 +107,21 @@ func registerAuthRequiredRoutes(rg *gin.RouterGroup, h *Handlers) {
 		rg.POST("/change-password", placeholder())
 		rg.POST("/logout", placeholder())
 	}
+}
+
+// parseCORSOrigins 将逗号分隔的字符串解析为 []string。
+//
+// 配置为空字符串时返回 nil，由 CORS() 中间件使用默认值 localhost:5173。
+func parseCORSOrigins(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }

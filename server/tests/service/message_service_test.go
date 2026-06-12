@@ -129,7 +129,7 @@ func TestMessageService_MarkAsRead(t *testing.T) {
 	msg := &model.Message{UserID: 1, Title: "测试", Content: "内容", Type: "test", IsRead: false, CreatedAt: now}
 	msgSvcDB.Create(msg)
 
-	err := svc.MarkAsRead(msg.ID)
+	err := svc.MarkAsRead(msg.ID, msg.UserID)
 	if err != nil {
 		t.Fatalf("期望无错误, got %v", err)
 	}
@@ -144,9 +144,26 @@ func TestMessageService_MarkAsRead(t *testing.T) {
 func TestMessageService_MarkAsRead_NotFound(t *testing.T) {
 	svc := setupMessageService(t)
 
-	err := svc.MarkAsRead(999999)
+	err := svc.MarkAsRead(999999, 1)
 	if err == nil {
 		t.Fatal("期望错误, got nil")
+	}
+}
+
+// TestMessageService_MarkAsRead_WrongOwner 验证跨用户标记已读被拒绝。
+//
+// 用户 A 的消息不应被用户 B 标记为已读，防止水平越权。
+func TestMessageService_MarkAsRead_WrongOwner(t *testing.T) {
+	svc := setupMessageService(t)
+
+	now := time.Now()
+	msg := &model.Message{UserID: 1, Title: "用户1的消息", Content: "内容", Type: "test", IsRead: false, CreatedAt: now}
+	msgSvcDB.Create(msg)
+
+	// 用户 2 尝试标记用户 1 的消息为已读 — 应被拒绝
+	err := svc.MarkAsRead(msg.ID, 2)
+	if err == nil {
+		t.Fatal("跨用户标记已读应返回错误, got nil")
 	}
 }
 

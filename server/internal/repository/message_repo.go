@@ -48,12 +48,13 @@ func (r *MessageRepo) ListByUser(userID int64, page, pageSize int) ([]model.Mess
 	return messages, total, nil
 }
 
-// MarkAsRead 将消息标记为已读。
+// MarkAsRead 将指定用户的消息标记为已读。
 //
+// 同时校验 id 和 user_id，防止用户 A 标记用户 B 的消息已读（水平越权）。
 // 为什么用 Update 而非 Save：仅更新 is_read 字段，避免意外覆盖其他列。
-// 消息不存在时返回 gorm.ErrRecordNotFound，Service 层据此返回明确错误。
-func (r *MessageRepo) MarkAsRead(id int64) error {
-	result := r.db.Model(&model.Message{}).Where("id = ?", id).
+// 消息不存在或不属于该用户时返回 gorm.ErrRecordNotFound。
+func (r *MessageRepo) MarkAsRead(id int64, userID int64) error {
+	result := r.db.Model(&model.Message{}).Where("id = ? AND user_id = ?", id, userID).
 		Update("is_read", true)
 	if result.Error != nil {
 		return result.Error

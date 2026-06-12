@@ -82,9 +82,6 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	// TODO: 不安全的类型断言 — userID.(int64) 缺少 comma-ok 检查。
-	// 若中间件重构导致 context 值类型变更，此处会 panic。
-	// 应改为: uid, ok := userID.(int64); if !ok { response.Error(c, errcode.ErrUnknown, "用户信息异常"); return }
 	uid, ok := userID.(int64)
 	if !ok {
 		response.Error(c, errcode.ErrUnknown, "用户信息异常")
@@ -111,9 +108,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 //
 // 为什么提取为独立函数：Login/Refresh/ChangePassword 共用相同的错误处理逻辑。
 // AppError 类型提取业务码，其他错误视为 500。
-//
-// TODO: 部分 Handler 未使用此函数，直接 response.Error(c, errcode.ErrUnknown, err.Error())
-// 将内部错误信息泄露到 HTTP 响应。应全局统一，非 AppError 只记日志 + 返回通用「服务器内部错误」。
 func handleServiceError(c *gin.Context, err error) {
 	var appErr service.AppError
 	if errors.As(err, &appErr) {

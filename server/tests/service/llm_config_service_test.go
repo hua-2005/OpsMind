@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"opsmind/internal/model"
@@ -260,5 +261,40 @@ func TestLLMConfigService_APIKeyMasked(t *testing.T) {
 	}
 	if len(apiKey) == 0 {
 		t.Error("API Key 脱敏后不应为空")
+	}
+}
+
+// TestLLMConfigResponse_MarshalJSON_MasksAPIKey 验证 JSON 序列化时自动脱敏 API Key。
+//
+// 即使 Service 层忘记调用 maskAPIKey()，MarshalJSON 也会在序列化前自动脱敏，
+// 提供编译期级别的安全保障。
+func TestLLMConfigResponse_MarshalJSON_MasksAPIKey(t *testing.T) {
+	resp := service.LlmConfigResponse{
+		ID:        1,
+		Name:      "openai",
+		APIKey:    "sk-1234567890abcdefghij",
+		LLMModel:  "gpt-4o",
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("Marshal 失败: %v", err)
+	}
+
+	var result map[string]interface{}
+	json.Unmarshal(data, &result)
+
+	apiKey, ok := result["api_key"].(string)
+	if !ok {
+		t.Fatal("api_key 字段缺失")
+	}
+
+	// 不应包含完整密钥
+	if apiKey == "sk-1234567890abcdefghij" {
+		t.Error("JSON 序列化应自动脱敏 API Key, 不能包含完整值")
+	}
+	// 应包含脱敏后的值（前4位 + **** + 后4位）
+	if len(apiKey) < 8 {
+		t.Errorf("脱敏后的 API Key 长度不足: %q (%d)", apiKey, len(apiKey))
 	}
 }

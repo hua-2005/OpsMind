@@ -12,10 +12,10 @@ import (
 )
 
 // setupRouter 创建用于测试的 Gin 路由
-func setupRouter() *gin.Engine {
+func setupRouter(allowOrigins []string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(allowOrigins))
 	r.GET("/test", func(c *gin.Context) {
 		c.String(200, "ok")
 	})
@@ -24,7 +24,7 @@ func setupRouter() *gin.Engine {
 
 // TestCORS_AllowedOrigin 测试允许的来源
 func TestCORS_AllowedOrigin(t *testing.T) {
-	r := setupRouter()
+	r := setupRouter([]string{"http://localhost:5173"})
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Origin", "http://localhost:5173")
@@ -41,7 +41,7 @@ func TestCORS_AllowedOrigin(t *testing.T) {
 
 // TestCORS_DisallowedOrigin 测试不允许的来源
 func TestCORS_DisallowedOrigin(t *testing.T) {
-	r := setupRouter()
+	r := setupRouter([]string{"http://localhost:5173"})
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Origin", "http://evil.com")
@@ -58,7 +58,7 @@ func TestCORS_DisallowedOrigin(t *testing.T) {
 
 // TestCORS_PreflightRequest 测试预检请求
 func TestCORS_PreflightRequest(t *testing.T) {
-	r := setupRouter()
+	r := setupRouter([]string{"http://localhost:5173"})
 
 	req := httptest.NewRequest("OPTIONS", "/test", nil)
 	req.Header.Set("Origin", "http://localhost:5173")
@@ -80,7 +80,7 @@ func TestCORS_PreflightRequest(t *testing.T) {
 
 // TestCORS_AllowedMethods 测试允许的 HTTP 方法
 func TestCORS_AllowedMethods(t *testing.T) {
-	r := setupRouter()
+	r := setupRouter([]string{"http://localhost:5173"})
 
 	methods := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
 
@@ -104,7 +104,7 @@ func TestCORS_AllowedMethods(t *testing.T) {
 
 // TestCORS_AllowedHeaders 测试允许的请求头
 func TestCORS_AllowedHeaders(t *testing.T) {
-	r := setupRouter()
+	r := setupRouter([]string{"http://localhost:5173"})
 
 	req := httptest.NewRequest("OPTIONS", "/test", nil)
 	req.Header.Set("Origin", "http://localhost:5173")
@@ -121,7 +121,7 @@ func TestCORS_AllowedHeaders(t *testing.T) {
 
 // TestCORS_MaxAge 测试 MaxAge 配置
 func TestCORS_MaxAge(t *testing.T) {
-	r := setupRouter()
+	r := setupRouter([]string{"http://localhost:5173"})
 
 	req := httptest.NewRequest("OPTIONS", "/test", nil)
 	req.Header.Set("Origin", "http://localhost:5173")
