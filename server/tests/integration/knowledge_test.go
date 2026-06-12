@@ -253,8 +253,8 @@ func TestKnowledgeIntegration_FullLifecycle(t *testing.T) {
 	articleBody := postJSON(t, env, fmt.Sprintf("/api/v1/admin/knowledge-bases/%d/articles", kbID),
 		request.CreateArticleRequest{
 			KBID:     kbID,
-			Question: "如何重置公司 VPN 密码？",
-			Answer:   "请登录 VPN 自助服务平台 https://vpn.company.com，点击「忘记密码」按提示操作。如无法自助重置，请联系 IT 服务台。",
+			Title:   "如何重置公司 VPN 密码？",
+			Content: "请登录 VPN 自助服务平台 https://vpn.company.com，点击「忘记密码」按提示操作。如无法自助重置，请联系 IT 服务台。",
 			Category: "网络与VPN",
 			Tags:     []string{"VPN", "密码", "自助"},
 		})
@@ -351,8 +351,8 @@ func TestKnowledgeIntegration_ReviewReject(t *testing.T) {
 	articleBody := postJSON(t, env, fmt.Sprintf("/api/v1/admin/knowledge-bases/%d/articles", kbID),
 		request.CreateArticleRequest{
 			KBID:     kbID,
-			Question: "待驳回的问题",
-			Answer:   "待驳回的答案",
+			Title:   "待驳回的问题",
+			Content: "待驳回的答案",
 		})
 	var articleResp struct{ Code int }
 	json.Unmarshal(articleBody, &articleResp)
@@ -416,8 +416,8 @@ func TestKnowledgeIntegration_ListAndDetail(t *testing.T) {
 	postJSON(t, env, fmt.Sprintf("/api/v1/admin/knowledge-bases/%d/articles", kbID),
 		request.CreateArticleRequest{
 			KBID:     kbID,
-			Question: "列表测试问题",
-			Answer:   "列表测试答案",
+			Title:   "列表测试问题",
+			Content: "列表测试答案",
 		})
 
 	req2 := httptest.NewRequest("GET",

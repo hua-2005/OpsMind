@@ -127,12 +127,24 @@ test.describe.serial('知识文章生命周期', () => {
 
   test.beforeAll(async ({ request }) => {
     if (!token) return;
+    // 先尝试查找已有知识库
     const resp = await request.get(apiUrl('/api/v1/admin/knowledge-bases'), {
       headers: authHeaders(token),
     });
     const body = await resp.json();
-    if (body.code === 0 && body.data?.items?.length > 0) {
-      kbId = body.data.items[0].id;
+    const items = Array.isArray(body.data) ? body.data : (body.data as Record<string,unknown>)?.items as Array<Record<string,unknown>>;
+    if (body.code === 0 && items?.length > 0) {
+      kbId = items[0].id as number;
+    } else {
+      // 不存在时自动创建，确保测试不因缺少 KB 而 skip
+      const createResp = await request.post(apiUrl('/api/v1/admin/knowledge-bases'), {
+        headers: authHeaders(token),
+        data: { name: `knowledge-test-kb-${Date.now()}`, description: '知识测试用知识库（自动创建）' },
+      });
+      const createBody = await createResp.json();
+      if (createBody.code === 0 && createBody.data?.id) {
+        kbId = createBody.data.id;
+      }
     }
   });
 
@@ -247,12 +259,24 @@ test.describe.serial('文档上传与处理', () => {
 
   test.beforeAll(async ({ request }) => {
     if (!token) return;
+    // 先尝试查找已有知识库
     const resp = await request.get(apiUrl('/api/v1/admin/knowledge-bases'), {
       headers: authHeaders(token),
     });
     const body = await resp.json();
-    if (body.code === 0 && body.data?.items?.length > 0) {
-      kbId = body.data.items[0].id;
+    const items = Array.isArray(body.data) ? body.data : (body.data as Record<string,unknown>)?.items as Array<Record<string,unknown>>;
+    if (body.code === 0 && items?.length > 0) {
+      kbId = items[0].id as number;
+    } else {
+      // 不存在时自动创建，确保测试不因缺少 KB 而 skip
+      const createResp = await request.post(apiUrl('/api/v1/admin/knowledge-bases'), {
+        headers: authHeaders(token),
+        data: { name: `knowledge-test-kb-${Date.now()}`, description: '知识测试用知识库（自动创建）' },
+      });
+      const createBody = await createResp.json();
+      if (createBody.code === 0 && createBody.data?.id) {
+        kbId = createBody.data.id;
+      }
     }
   });
 

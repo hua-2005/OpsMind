@@ -125,11 +125,12 @@ func (s *LLMConfigService) GetManager() *LLMConfigManager {
 // CreateConfig 创建 LLM 配置。
 //
 // 业务规则：is_default=true 时先清空其他默认配置（保证唯一性）。
-func (s *LLMConfigService) CreateConfig(name string, providerType int16, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel string, maxTokens, vectorDimension int, isDefault bool) error {
+// 返回创建的配置对象（含自增 ID），便于调用方获取创建结果。
+func (s *LLMConfigService) CreateConfig(name string, providerType int16, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel string, maxTokens, vectorDimension int, isDefault bool) (*model.LlmConfig, error) {
 	// TODO(service/llm_config): 校验 providerType、baseURL URL 格式、maxTokens/vectorDimension 范围。
 	// 目前非法配置可写入数据库，直到问答时才暴露为外部服务错误。
 	if strings.TrimSpace(name) == "" {
-		return AppError{Code: errcode.ErrParam, Message: "名称不能为空"}
+		return nil, AppError{Code: errcode.ErrParam, Message: "名称不能为空"}
 	}
 
 	cfg := &model.LlmConfig{
@@ -156,16 +157,16 @@ func (s *LLMConfigService) CreateConfig(name string, providerType int16, baseURL
 			return s.repo.Create(cfg)
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 	} else {
 		if isDefault {
 			if err := s.repo.ClearDefault(); err != nil {
-				return AppError{Code: errcode.ErrUnknown, Message: "清空默认配置失败"}
+				return nil, AppError{Code: errcode.ErrUnknown, Message: "清空默认配置失败"}
 			}
 		}
 		if err := s.repo.Create(cfg); err != nil {
-			return AppError{Code: errcode.ErrUnknown, Message: "创建 LLM 配置失败"}
+			return nil, AppError{Code: errcode.ErrUnknown, Message: "创建 LLM 配置失败"}
 		}
 	}
 
@@ -176,7 +177,7 @@ func (s *LLMConfigService) CreateConfig(name string, providerType int16, baseURL
 		s.manager.store(cfg)
 	}
 
-	return nil
+	return cfg, nil
 }
 
 // UpdateConfig 更新 LLM 配置。

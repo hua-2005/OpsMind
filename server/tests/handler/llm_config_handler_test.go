@@ -23,15 +23,15 @@ import (
 
 type mockLLMConfigSvc struct {
 	configs    []service.LlmConfigResponse
-	createFn   func(name string, providerType int16, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel string, maxTokens, vectorDimension int, isDefault bool) error
+	createFn   func(name string, providerType int16, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel string, maxTokens, vectorDimension int, isDefault bool) (*model.LlmConfig, error)
 	getConfigFn func(id int64) (*model.LlmConfig, error)
 }
 
-func (m *mockLLMConfigSvc) CreateConfig(name string, providerType int16, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel string, maxTokens, vectorDimension int, isDefault bool) error {
+func (m *mockLLMConfigSvc) CreateConfig(name string, providerType int16, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel string, maxTokens, vectorDimension int, isDefault bool) (*model.LlmConfig, error) {
 	if m.createFn != nil {
 		return m.createFn(name, providerType, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel, maxTokens, vectorDimension, isDefault)
 	}
-	return nil
+	return nil, nil
 }
 
 func (m *mockLLMConfigSvc) ListConfigs() ([]service.LlmConfigResponse, error) {
@@ -96,9 +96,9 @@ func TestLLMConfigHandler_ListConfigs(t *testing.T) {
 func TestLLMConfigHandler_CreateConfig(t *testing.T) {
 	captured := ""
 	svc := &mockLLMConfigSvc{
-		createFn: func(name string, providerType int16, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel string, maxTokens, vectorDimension int, isDefault bool) error {
+		createFn: func(name string, providerType int16, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel string, maxTokens, vectorDimension int, isDefault bool) (*model.LlmConfig, error) {
 			captured = name
-			return nil
+			return nil, nil
 		},
 	}
 

@@ -30,7 +30,7 @@ type LLMConfigHandler struct {
 
 // llmConfigService 定义 Handler 需要的 Service 方法（消费者定义接口）。
 type llmConfigService interface {
-	CreateConfig(name string, providerType int16, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel string, maxTokens, vectorDimension int, isDefault bool) error
+	CreateConfig(name string, providerType int16, baseURL, embeddingBaseURL, apiKey, llmModel, embeddingModel string, maxTokens, vectorDimension int, isDefault bool) (*model.LlmConfig, error)
 	ListConfigs() ([]service.LlmConfigResponse, error)
 	GetConfig(id int64) (*model.LlmConfig, error)
 	UpdateConfig(cfg *model.LlmConfig) error
@@ -83,13 +83,13 @@ func (h *LLMConfigHandler) CreateConfig(c *gin.Context) {
 		req.VectorDimension = 1024
 	}
 
-	err := h.svc.CreateConfig(req.Name, req.ProviderType, req.BaseURL, req.EmbeddingBaseURL, req.APIKey,
+	cfg, err := h.svc.CreateConfig(req.Name, req.ProviderType, req.BaseURL, req.EmbeddingBaseURL, req.APIKey,
 		req.LLMModel, req.EmbeddingModel, req.MaxTokens, req.VectorDimension, req.IsDefault)
 	if err != nil {
 		handleServiceError(c, err)
 		return
 	}
-	response.Success(c, nil)
+	response.Success(c, cfg)
 }
 
 // GetConfig 获取单个 LLM 配置详情。
