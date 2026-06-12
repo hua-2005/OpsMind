@@ -99,5 +99,7 @@ export function getTicketDetail(id: number) {
 
 /** 补充申告信息（仅"需补充信息"状态可操作） */
 export function supplementTicket(id: number, data: SupplementTicketParams) {
+  // TODO(api/ticket): 后端门户补充接口使用 PATCH，不是 POST。
+  // 方法不一致会导致 404/405，前端补充信息功能不可用。
   return request.post<ApiResponse<null>>(`/api/v1/portal/tickets/${id}/supplement`, data)
 }

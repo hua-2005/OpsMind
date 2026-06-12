@@ -208,6 +208,8 @@ async function fetchConfigs() {
   loading.value = true
   try {
     const res = await getLLMConfigs()
+    // TODO(admin/LLMConfig): getLLMConfigs 类型应直接返回 ApiResponse<LLMConfigItem[]> 解包后的 data。
+    // 这里的 (res as any).data || res 是响应拦截器契约不清晰的表现。
     const data = (res as any).data || res
     configs.value = Array.isArray(data) ? data : (data?.items || [])
   } catch {
@@ -259,6 +261,8 @@ function closeModal() {
 async function handleSubmit() {
   if (!form.name) { toast.showToast('名称不能为空', 'error'); return }
   if (!form.base_url) { toast.showToast('Base URL 不能为空', 'error'); return }
+  // TODO(admin/LLMConfig): 提交前应校验 base_url/embedding_base_url 是合法 URL，且 provider_type=1 时提示容器内地址规则。
+  // 直接提交非法 URL 会让后端测试连接或问答阶段才失败。
   if (!form.llm_model) { toast.showToast('LLM 模型不能为空', 'error'); return }
   if (!form.embedding_model) { toast.showToast('Embedding 模型不能为空', 'error'); return }
 
@@ -292,12 +296,16 @@ async function handleSubmit() {
 }
 
 async function handleTestConnection(cfg: LLMConfigItem) {
+  // TODO(admin/LLMConfig): 测试连接应允许测试正在编辑但未保存的表单配置。
+  // 当前只能测试已保存配置，用户无法在保存前验证 Base URL/API Key。
   showTestResult.value = true
   testing.value = true
   testResult.value = null
   try {
     const res = await testLLMConnection(cfg.id)
     const data = (res as any).data || res
+    // TODO(admin/LLMConfig): 后端返回 latency_ms，当前读取 data.latency 会显示 0。
+    // API 类型和页面展示字段需要同步修正。
     testResult.value = { success: true, model: data.model || cfg.llm_model, latency: data.latency || 0 }
   } catch (e: any) {
     testResult.value = { success: false }

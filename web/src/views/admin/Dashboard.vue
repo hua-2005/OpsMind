@@ -113,6 +113,8 @@ async function fetchStats() {
   loading.value = true; error.value = ''
   try {
     const res = await getStats()
+    // TODO(admin/Dashboard): 统计卡片可增加“更新时间”和手动刷新按钮。
+    // 当前用户无法判断数据是否刚刷新，失败后只在错误 alert 中有重试入口。
     const data = (res as any).data || res
     if (data) stats.value = data
   } catch (e: any) {
@@ -124,6 +126,8 @@ async function fetchTrends() {
   if (!trendDateRange.value) return
   trendsLoading.value = true
   const [start, end] = trendDateRange.value
+  // TODO(admin/Dashboard): toISOString 会按 UTC 转日期，东八区凌晨可能出现日期偏移。
+  // 应使用本地日期格式化函数生成 YYYY-MM-DD。
   try {
     const res = await getTrends({
       start_date: new Date(start).toISOString().slice(0, 10),
@@ -137,6 +141,8 @@ async function fetchTrends() {
 }
 
 function barHeight(count: number, max: number): number {
+  // TODO(admin/Dashboard): 小数值统一最小 4px 会让 0 和 1 的视觉差异不明显。
+  // 0 应显示 0 高度或空状态，非 0 再使用最小可见高度。
   if (max <= 0) return 0
   return Math.max(4, Math.round((count / max) * 120))
 }

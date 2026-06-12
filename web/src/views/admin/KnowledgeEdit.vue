@@ -149,6 +149,8 @@
 <script setup lang="ts">
 // TODO(admin/KnowledgeEdit): 组件超过 400 行 — 应拆分为文档上传区域、元信息表单、处理状态展示等子组件。
 // TODO(admin/KnowledgeEdit): fetchArticle/fetchKBs 失败时仅 console.error，无用户可见提示，无 loading 状态。
+// TODO(admin/KnowledgeEdit): 当前页面按 v2 title/content 构造表单，但后端仍使用 question/answer。
+// 保存前需要明确字段映射层，或先完成后端 DTO/模型迁移。
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
@@ -276,6 +278,8 @@ function removeFile(i: number) { uploadFiles.value.splice(i, 1) }
 
 async function handleUpload() {
   if (!form.value.kb_id || uploadFiles.value.length === 0) return
+  // TODO(admin/KnowledgeEdit): 多文件上传时应显示每个文件的独立状态和失败原因。
+  // 当前 uploadResult 只有一条汇总消息，部分成功/部分失败时无法表达。
   uploading.value = true
   uploadResult.value = null
   try {
@@ -310,6 +314,8 @@ function processStatusClass(s: number) {
   return m[s] || ''
 }
 function processStatusText(s: number) {
+  // TODO(admin/KnowledgeEdit): process_status 后端计划返回字符串 pending/parsing/chunking/embedding/completed/failed。
+  // 这里按数字映射会和接口文档不一致。
   const m: Record<number, string> = { 0: '待处理', 1: '解析中', 2: '分块中', 3: '向量化中', 4: '已完成', 5: '失败' }
   return m[s] || '未知'
 }

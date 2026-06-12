@@ -22,12 +22,16 @@ type LlmConfig struct {
 	ProviderType     int16     `gorm:"not null;default:1;column:provider_type" json:"provider_type"` // 1=llama.cpp, 2=OpenAI-compatible
 	BaseURL          string    `gorm:"type:varchar(512);not null;column:base_url" json:"base_url"`
 	EmbeddingBaseURL string    `gorm:"type:varchar(512);column:embedding_base_url" json:"embedding_base_url"` // Embedding 独立地址，空则回退到 BaseURL
+	// TODO(model/llm_config): API 文档要求 api_key 数据库 AES-256 加密存储。
+	// 当前模型是明文字段，需在 Repository/Service 层加入加解密或使用数据库加密方案。
 	APIKey           string    `gorm:"type:varchar(512);column:api_key" json:"api_key"`
 	LLMModel         string    `gorm:"type:varchar(128);not null;column:llm_model" json:"llm_model"`
 	EmbeddingModel   string    `gorm:"type:varchar(128);not null;column:embedding_model" json:"embedding_model"`
 	MaxTokens        int       `gorm:"not null;default:8192;column:max_tokens" json:"max_tokens"`
 	VectorDimension  int       `gorm:"not null;default:1024;column:vector_dimension" json:"vector_dimension"`
 	IsDefault        bool      `gorm:"not null;default:false;column:is_default" json:"is_default"`
+	// TODO(model/llm_config): 为 is_default=true 增加部分唯一索引。
+	// PostgreSQL 可用 CREATE UNIQUE INDEX ... WHERE is_default，彻底防并发双默认。
 	CreatedAt        time.Time `gorm:"not null" json:"created_at"`
 	UpdatedAt        time.Time `gorm:"not null" json:"updated_at"`
 }

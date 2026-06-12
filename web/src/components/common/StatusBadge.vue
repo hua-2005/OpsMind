@@ -15,6 +15,8 @@ const props = withDefaults(defineProps<{ status: number; type?: 'user' | 'ticket
 // 状态文本映射
 const TEXT_MAP: Record<string, Record<number, string>> = {
   user: { 1: '正常', 2: '已冻结' },
+  // TODO(component/StatusBadge): ticket 状态从 0 开始，但后端 model.TicketStatus 从 1 开始。
+  // 使用该组件展示后端状态会整体错位。
   ticket: { 0: '待处理', 1: '处理中', 2: '需补充信息', 3: '已解决', 4: '已关闭' },
 }
 // Naive UI Tag type 映射

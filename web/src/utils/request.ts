@@ -24,6 +24,8 @@ interface InterceptedAxiosInstance {
 // 全局 loading 计数器 — 模块级共享变量，避免循环依赖
 // 由 useLoading composable 在组件中使用，拦截器直接操作此变量
 export const loadingState = { active: 0 }
+// TODO(web/request): loadingState 是模块级全局计数，SSR/多实例测试时会共享状态。
+// 如果未来引入服务端渲染或并发组件测试，应改为 Pinia store 或可注入实例。
 
 function incLoading() { loadingState.active++ }
 function decLoading() { if (loadingState.active > 0) loadingState.active-- }
@@ -32,6 +34,8 @@ function decLoading() { if (loadingState.active > 0) loadingState.active-- }
 const raw = axios.create({
   timeout: 30000,
 })
+// TODO(web/request): baseURL 为空依赖 Vite proxy/Nginx 配置。
+// 建议从 import.meta.env.VITE_API_BASE_URL 读取，方便测试、预发和生产环境切换。
 
 // 类型断言：拦截器已提取 response.data，返回类型简化为 T
 const request = raw as unknown as InterceptedAxiosInstance
@@ -76,6 +80,8 @@ raw.interceptors.response.use(
           break
         case 403:
           // 无权限 — 输出错误并跳转登录页（角色不匹配时后端返回 403）
+          // TODO(web/request): 403 不应统一跳登录页。
+          // 已登录但无权限应跳 403 页面或提示无权限，避免用户误以为登录失效。
           console.error('无权限访问该资源')
           if (router.currentRoute.value.path !== '/login') {
             router.push('/login')
@@ -85,6 +91,8 @@ raw.interceptors.response.use(
           console.error(response.data?.message || '请求失败')
       }
     } else {
+      // TODO(web/request): 网络错误应区分 timeout、abort、DNS/连接失败。
+      // 统一“网络错误”不利于前端展示重试策略。
       console.error('网络错误')
     }
 

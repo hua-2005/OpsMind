@@ -163,6 +163,8 @@ function removeTag(index: number) {
 }
 
 async function handleSubmit() {
+  // TODO(portal/TicketSubmit): 提交前应清洗 affected_systems 空值并校验 contact_email 格式。
+  // 后端目前也缺少这些校验，前端可先给用户即时反馈。
   submitError.value = ''
   submitSuccess.value = false
 

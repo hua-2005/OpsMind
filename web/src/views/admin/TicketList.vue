@@ -36,6 +36,8 @@ const loading = ref(true); const tickets = ref<TicketItem[]>([])
 const toast = useToast()
 
 onMounted(async () => {
+  // TODO(admin/TicketList): 列表缺少状态/紧急程度筛选和分页控件。
+  // 当前固定 page_size=50，数据量增加后无法浏览全部工单。
   try { const res = await listAllTickets({ page_size: 50 }) as any; tickets.value = res?.data || res?.items || [] }
   catch (err) { console.error('加载申告列表失败', err); toast.showToast('加载申告列表失败', 'error') }
   finally { loading.value = false }

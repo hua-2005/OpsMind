@@ -12,6 +12,8 @@ export interface AuditLogItem {
   target_type?: string
   target_id?: number
   detail?: string
+  // TODO(api/audit): 后端字段是 ip_address，前端这里写 ip。
+  // 字段不一致会导致审计列表 IP 列为空。
   ip?: string
   created_at?: string
 }

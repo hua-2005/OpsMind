@@ -45,6 +45,8 @@ export function listMessages(page: number = 1, pageSize: number = 10) {
 
 /** 标记消息为已读 */
 export function markAsRead(id: number) {
+  // TODO(api/message): 标记已读后应在调用方同步刷新 unread-count 或让接口返回新计数。
+  // 仅返回 null 会让布局角标短时间内滞后。
   return request.put<ApiResponse<null>>(`/api/v1/portal/messages/${id}/read`)
 }
 

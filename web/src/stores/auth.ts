@@ -16,6 +16,8 @@ interface UserInfo {
 export type { MenuItem }
 
 export const useAuthStore = defineStore('auth', () => {
+  // TODO(store/auth): 刷新页面后只恢复 token，不恢复 user/roles/permissions/menus。
+  // 路由守卫和布局菜单会在首次刷新时丢失权限状态。
   // State
   const token = ref(getToken() || '')
   const user = ref<UserInfo | null>(null)
@@ -51,6 +53,8 @@ export const useAuthStore = defineStore('auth', () => {
     permissions: string[]
     menus: MenuItem[]
   }) => {
+    // TODO(store/auth): setUserInfo 应持久化必要的用户和权限快照，或提供 restoreFromToken/restoreFromMe。
+    // 只存在内存里会让刷新后的菜单和角色判断不稳定。
     user.value = data.user
     roles.value = data.roles
     permissions.value = data.permissions

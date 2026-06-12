@@ -14,6 +14,8 @@ type ChatSessionResponse struct {
 	DurationMS      int          `json:"duration_ms"`
 	Feedback        int16        `json:"feedback"`
 	CreatedAt       string       `json:"created_at"`
+	// TODO(dto/chat): 增加 pipeline 字段，与 docs/API/chat.md 的 done metadata 对齐。
+	// 当前前端期待 pipeline_metrics，后端文档期待 pipeline，命名也需要统一。
 }
 
 // SourceItem 知识来源条目。

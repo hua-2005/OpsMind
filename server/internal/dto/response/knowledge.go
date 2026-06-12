@@ -10,6 +10,8 @@ type KBResponse struct {
 	ID             int64  `json:"id"`
 	Name           string `json:"name"`
 	Description    string `json:"description"`
+	// TODO(dto/knowledge): 门户端响应不应返回 rag_workspace_slug/embedding_model/vector_dimension/created_by。
+	// 建议拆分 AdminKBResponse 和 PortalKBResponse，避免字段过曝。
 	RAGWorkspaceSlug string `json:"rag_workspace_slug"`
 	EmbeddingModel string `json:"embedding_model"`
 	VectorDimension int  `json:"vector_dimension"`
@@ -31,6 +33,8 @@ type ArticleListResponse struct {
 
 // ArticleResponse 文章列表项响应。
 type ArticleResponse struct {
+	// TODO(dto/knowledge): ArticleResponse 仍暴露 question/answer。
+	// v2 列表应返回 title/content/source_type/process_status/word_count/chunk_count。
 	ID            int64     `json:"id"`
 	KBID          int64     `json:"kb_id"`
 	KBName        string    `json:"kb_name"`
@@ -55,6 +59,8 @@ type ArticleDetailResponse struct {
 
 // ChunkResponse 知识切片响应。
 type ChunkResponse struct {
+	// TODO(dto/knowledge): ChunkResponse 已有 kb_id/chunk_index，但缺少 created_at。
+	// 如前端需要展示处理结果时间线，应与 docs/API/knowledge.md 保持完整一致。
 	ID              int64  `json:"id"`
 	KBID            int64  `json:"kb_id"`
 	Content         string `json:"content"`

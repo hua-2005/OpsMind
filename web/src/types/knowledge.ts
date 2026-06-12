@@ -6,6 +6,8 @@
 
 /** 知识文章状态 */
 export enum KnowledgeStatus {
+  // TODO(types/knowledge): 知识状态枚举从 0 开始，与后端 ArticleStatusDraft=1 不一致。
+  // 需要以前后端共享的 docs/API/knowledge.md 为准统一。
   Draft = 0,
   PendingReview = 1,
   Published = 2,
@@ -14,6 +16,8 @@ export enum KnowledgeStatus {
 
 /** 文档处理状态 */
 export enum ProcessStatus {
+  // TODO(types/knowledge): 文档处理状态在 API 文档中是字符串，不是数字枚举。
+  // 前端应改为 string union，避免和后端 process_status 绑定错位。
   Pending = 0,
   Processing = 1,
   Completed = 2,

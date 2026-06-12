@@ -73,6 +73,8 @@
 
 <script setup lang="ts">
 // TODO(admin/UserList): 创建/编辑用户表单缺少手机号、邮箱格式校验，密码无强度指示器。
+// TODO(admin/UserList): 角色列表接口分页响应未正确解包时，allRoles 可能为空导致创建用户无法分配角色。
+// 应先修正 api/role 类型，再移除页面里的 any 兼容。
 import { ref, onMounted } from 'vue'
 import { getUserList, createUser, updateUser, freezeUser, restoreUser } from '@/api/user'
 import { getRoleList } from '@/api/role'
@@ -118,6 +120,8 @@ function startEdit(user: UserItem) {
 function closeDialog() { showDialog.value = false }
 
 async function handleSave() {
+  // TODO(admin/UserList): 保存时没有区分创建和编辑的必填字段。
+  // 编辑用户不需要密码，但创建用户必须显示并校验密码策略。
   saving.value = true
   try {
     if (isEdit.value && editingId.value) {

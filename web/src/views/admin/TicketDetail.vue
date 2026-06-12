@@ -94,6 +94,8 @@ onMounted(async () => {
 // toast 已通过 useToast composable 管理，自动处理定时器清理
 
 async function doAction(action: string) {
+  // TODO(admin/TicketDetail): updateTicketStatus 提交字段需要使用 result，而不是 content。
+  // 当前 api/admin.ts 类型与后端 DTO 不一致，处理结果可能不会保存到记录内容。
   saving.value = true
   try {
     await updateTicketStatus(ticket.value!.id, { action, content: actionContent.value })

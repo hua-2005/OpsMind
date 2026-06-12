@@ -13,6 +13,8 @@ type User struct {
 	PasswordHash string    `gorm:"type:varchar(255);not null;column:password_hash" json:"-"`
 	RealName     string    `gorm:"type:varchar(64);not null;column:real_name" json:"real_name"`
 	Phone        string    `gorm:"type:varchar(11);not null" json:"phone"`
+	// TODO(model/user): phone 应增加唯一索引或明确允许重复。
+	// UserRepo 已提供 ExistsByPhone，但数据库没有唯一约束时并发创建仍可能重复。
 	Email        string    `gorm:"type:varchar(128)" json:"email"`
 	Status       int16     `gorm:"not null;default:1" json:"status"`
 	FirstLogin   bool      `gorm:"not null;default:true;column:first_login" json:"first_login"`
@@ -32,6 +34,8 @@ type Role struct {
 	Name        string          `gorm:"type:varchar(64);uniqueIndex;not null" json:"name"`
 	Description string          `gorm:"type:varchar(255)" json:"description"`
 	Permissions datatypes.JSON  `gorm:"type:jsonb" json:"permissions"`
+	// TODO(model/user): 角色应增加 immutable/system 字段标识内置角色。
+	// 系统管理员、报障人等基础角色需要防止误删或错误改名。
 	CreatedAt   time.Time       `gorm:"not null" json:"created_at"`
 	UpdatedAt   time.Time       `gorm:"not null" json:"updated_at"`
 }

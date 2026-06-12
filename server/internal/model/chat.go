@@ -14,6 +14,8 @@ type ChatSession struct {
 	Question   string         `gorm:"type:text;not null" json:"question"`
 	Answer     string         `gorm:"type:text" json:"answer"`
 	Sources    datatypes.JSON `gorm:"type:jsonb" json:"sources"`
+	// TODO(model/chat): 增加 pipeline_metrics JSONB 字段。
+	// API 文档要求返回 RAG 步骤耗时，当前模型没有地方持久化历史会话的管道指标。
 	Confidence float64        `json:"confidence"`
 	Feedback   int16          `json:"feedback"`
 	DurationMs int            `gorm:"column:duration_ms" json:"duration_ms"`
@@ -26,6 +28,8 @@ func (ChatSession) TableName() string { return "chat_sessions" }
 type ChatMessage struct {
 	ID         int64          `gorm:"primaryKey;autoIncrement" json:"id"`
 	SessionID  int64          `gorm:"not null;column:session_id" json:"session_id"`
+	// TODO(model/chat): session_id 应有索引和外键约束。
+	// 历史会话消息按 session 查询会是高频路径，缺少索引会拖慢详情页。
 	Role       string         `gorm:"type:varchar(16);not null" json:"role"`
 	Content    string         `gorm:"type:text;not null" json:"content"`
 	Sources    datatypes.JSON `gorm:"type:jsonb" json:"sources"`

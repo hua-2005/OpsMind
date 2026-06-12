@@ -35,6 +35,8 @@ export interface RAGOptions {
 }
 
 export const useChatStore = defineStore('chat', () => {
+  // TODO(store/chat): messages 没有按 session 持久化，页面刷新或切换路由会丢失当前对话。
+  // 可考虑本地缓存最近会话 ID，再从后端 GetChatDetail 恢复。
   // State
   const currentSession = ref<ChatSessionResponse | null>(null)
   const messages = ref<Array<{ id: string; role: string; content: string; sources?: import('@/api/chat').SourceItem[]; isStreaming?: boolean }>>([])
@@ -59,6 +61,8 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 发送问题（SSE 流式模式，默认） */
   async function sendQuestion(question: string, kbID: number) {
+    // TODO(store/chat): 没有取消上一个流式请求的 AbortController。
+    // 用户连续发送或离开页面时，旧请求仍可能继续写入 messages。
     loading.value = true
     streaming.value = true
     selectedKBID.value = kbID
@@ -115,6 +119,8 @@ export const useChatStore = defineStore('chat', () => {
         },
         onError(error: string) {
           // 流式失败时移除占位消息，显示错误
+          // TODO(store/chat): aiMsgIndex 在并发发送时可能已经不是占位消息位置。
+          // 应按 aiMsgId 查找并更新，避免删除错消息。
           messages.value.splice(aiMsgIndex, 1)
           messages.value.push({
             id: crypto.randomUUID(),
@@ -133,6 +139,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!currentSession.value) return
     try {
       await submitFeedbackApi(currentSession.value.session_id, feedback)
+      // TODO(store/chat): 成功后应更新 currentSession.feedback，避免用户可重复点击且 UI 不反馈状态。
     } catch (err) {
       console.error('提交反馈失败', err)
     }

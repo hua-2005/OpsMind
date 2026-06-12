@@ -20,6 +20,8 @@ export interface StatsData {
 export interface TrendParams {
   start_date: string
   end_date: string
+  // TODO(api/dashboard): 后端当前未实现 granularity，传 week 不会生效。
+  // 要么后端支持 day/week，要么前端类型移除此字段。
   granularity: string // 'day' | 'week'
 }
 

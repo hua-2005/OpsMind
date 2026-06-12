@@ -30,6 +30,8 @@ interface KnowledgeBaseItem {
 
 /** 知识库列表（后台管理用，需要 admin 权限） */
 export function listKnowledgeBases() {
+  // TODO(api/knowledge): 后端 ListKBs 当前直接返回数组，部分页面却按 data.items 解包。
+  // 应统一为 PageResponse/KBListResponse 或直接数组，移除调用方兼容代码。
   return request.get<ApiResponse<KnowledgeBaseItem[]>>('/api/v1/admin/knowledge-bases')
 }
 
@@ -51,6 +53,8 @@ export function updateKnowledgeBase(id: number, data: UpdateKBParams) {
 // =============================================================================
 
 interface CreateArticleParams {
+  // TODO(api/knowledge): 前端发送 title/content，但后端 DTO 仍要求 question/answer。
+  // 在后端迁移前，这里会创建失败；应尽快统一 v2 文章模型字段。
   kb_id: number
   title: string
   content: string
@@ -134,6 +138,8 @@ export function retrySyncArticle(id: number) {
 
 /** 上传文档到知识库（multipart form） */
 export function uploadDocuments(kbID: number, formData: FormData) {
+  // TODO(api/knowledge): 后端当前读取字段 file，API 文档要求 files，多文件上传也未对齐。
+  // 前端 FormData append 的 key 必须和后端统一，否则上传接口不可用。
   return request.post<ApiResponse<KnowledgeArticleItem>>(`/api/v1/admin/knowledge-bases/${kbID}/documents/upload`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
@@ -141,6 +147,8 @@ export function uploadDocuments(kbID: number, formData: FormData) {
 
 /** 查询文档处理状态 */
 export function getDocumentStatus(kbID: number, articleID: number) {
+  // TODO(api/knowledge): 后端返回 process_status 字符串，类型这里写 status/status_text number。
+  // 需要按 docs/API/knowledge.md 对齐为 process_status/process_error/progress。
   return request.get<ApiResponse<{ status: number; status_text: string }>>(`/api/v1/admin/knowledge-bases/${kbID}/documents/${articleID}/status`)
 }
 

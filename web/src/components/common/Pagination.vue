@@ -13,6 +13,8 @@
 <script setup lang="ts">
 import { NPagination } from 'naive-ui'
 
+// TODO(component/Pagination): page-size 改变时应重置 currentPage=1。
+// 否则从高页码切到大 pageSize 可能请求到空页。
 defineProps<{ total: number; currentPage: number; pageSize: number }>()
 defineEmits<{
   (e: 'update:current-page', page: number): void

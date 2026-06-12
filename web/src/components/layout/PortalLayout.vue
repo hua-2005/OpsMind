@@ -58,6 +58,8 @@ const toast = useToast()
 const unreadCount = ref(0)
 
 onMounted(async () => {
+  // TODO(layout/PortalLayout): 未读数只在挂载时加载一次。
+  // 进入消息页标记已读后，顶部角标不会自动刷新，应接入 appStore 或轮询/推送。
   try {
     const res = await getUnreadCount()
     const data = (res as any).data || res
@@ -69,6 +71,8 @@ onMounted(async () => {
 })
 
 function handleLogout() {
+  // TODO(layout/PortalLayout): 与 AdminLayout 重复 logout 逻辑，可提取到 authStore.logout()。
+  // 后续加入服务端登出时只需改一处。
   authStore.clearAuth()
   router.push('/login')
 }

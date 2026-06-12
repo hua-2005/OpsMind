@@ -11,5 +11,7 @@ export interface RoleItem {
 }
 
 export function getRoleList() {
+  // TODO(api/role): 后端角色列表使用分页响应，当前类型声明为 RoleItem[]。
+  // 调用方大量使用 res?.data || res 兼容，根因是这里类型与真实响应不一致。
   return request.get<ApiResponse<RoleItem[]>>('/api/v1/admin/roles')
 }

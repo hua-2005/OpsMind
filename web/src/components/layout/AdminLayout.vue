@@ -94,6 +94,8 @@ function renderIcon(icon: Component) {
 
 // 菜单选项
 const menuOptions = computed(() => {
+  // TODO(layout/AdminLayout): 菜单仍是前端硬编码，登录接口已经返回 menus。
+  // 应根据 authStore.menus 渲染，才能真正支持后台动态菜单和按钮权限。
   const items: any[] = [
     { label: '数据看板', key: '/admin/dashboard', icon: renderIcon(GridOutline) },
     { label: '申告管理', key: '/admin/tickets', icon: renderIcon(TicketOutline) },
@@ -134,6 +136,8 @@ const userDropdownOptions = [
 
 function handleUserDropdown(key: string) {
   if (key === 'logout') {
+    // TODO(layout/AdminLayout): 退出时应调用后端 logout 或未来的 token revoke 接口。
+    // 只清本地状态无法让已泄露 token 失效。
     authStore.clearAuth()
     router.push('/login')
   } else if (key === 'password') {

@@ -14,6 +14,8 @@ import { ref, onUnmounted } from 'vue'
 export type ToastType = 'success' | 'error' | 'info'
 
 export function useToast(defaultDuration = 2000) {
+  // TODO(composable/toast): 每个组件各自创建 toast 状态，多个页面/弹窗同时触发时会出现多个 toast 容器。
+  // 可改为全局 ToastProvider 或 Pinia 队列，统一位置、排队和关闭行为。
   const visible = ref(false)
   const message = ref('')
   const type = ref<ToastType>('info')

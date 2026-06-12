@@ -45,6 +45,8 @@ export function useAIConfig() {
 
   /** 从后端加载配置值 */
   async function loadConfig(getConfig: (key: string) => Promise<{ data: unknown }>) {
+    // TODO(composable/ai-config): loadConfig 吞掉错误并使用默认值，页面无法提示配置加载失败。
+    // 应返回错误状态或让调用方决定是否展示降级提示。
     loading.value = true
     try {
       const [topKRes, thresholdRes] = await Promise.all([

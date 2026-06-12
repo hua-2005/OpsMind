@@ -7,6 +7,8 @@ import { ref, computed } from 'vue'
 type Theme = 'dark' | 'light'
 
 const STORAGE_KEY = 'opsmind-theme'
+// TODO(composable/theme): 顶层直接访问 localStorage/document，不适合 SSR 和单元测试环境。
+// 可在 useTheme 内惰性初始化，并检查 typeof window !== 'undefined'。
 const currentTheme = ref<Theme>((localStorage.getItem(STORAGE_KEY) as Theme) || 'dark')
 
 function applyTheme(theme: Theme) {

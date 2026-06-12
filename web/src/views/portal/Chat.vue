@@ -126,6 +126,8 @@ onMounted(async () => {
   try {
     const res = await listKnowledgeBasesForPortal()
     // 后端返回 { items: [...] }，需要提取 items 数组
+    // TODO(portal/Chat): 知识库为空或加载失败时应显示用户可见空状态/错误状态。
+    // 当前只 console.error，用户只会看到输入框禁用但不知道原因。
     const data = (res as any).data || res
     const items = data?.items || data
     knowledgeBases.value = Array.isArray(items) ? items : []
@@ -140,6 +142,8 @@ onMounted(async () => {
 async function handleSend() {
   const q = question.value.trim()
   if (!q || !selectedKB.value) return
+  // TODO(portal/Chat): 发送前应校验 top_k 在 1-20，并禁用高级设置中的非法值。
+  // 只靠 input min/max 不能阻止手动输入或脚本修改。
 
   question.value = ''
   await chatStore.sendQuestion(q, selectedKB.value)
@@ -148,6 +152,8 @@ async function handleSend() {
 }
 
 async function handleFeedback(value: number) {
+  // TODO(portal/Chat): 反馈提交成功后应隐藏按钮或显示已反馈状态。
+  // 目前用户可以重复点击，且失败时没有提示。
   await chatStore.submitFeedback(value)
 }
 

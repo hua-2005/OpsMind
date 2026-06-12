@@ -16,6 +16,8 @@ type CreateTicketRequest struct {
 	AffectedSystems []string `json:"affected_systems"`
 	ContactPhone    string   `json:"contact_phone" binding:"required"`
 	ContactEmail    string   `json:"contact_email"`
+	// TODO(dto/ticket): ChatContext 应使用结构化对象而不是 JSON 字符串。
+	// Handler/Service 可以直接绑定并校验字段，避免客户端传入非法 JSON。
 	ChatContext     string   `json:"chat_context"` // JSON 字符串，从问答转申告时带入
 }
 
@@ -38,6 +40,7 @@ type SupplementTicketRequest struct {
 // ToKnowledgeCandidate 为 true 时，resolve 操作会将此申告标记为知识候选。
 type UpdateTicketStatusRequest struct {
 	Action                string `json:"action" binding:"required"`
+	// TODO(dto/ticket): action 应使用 binding oneof 或自定义校验限制为 start/request_info/resolve/close。
 	Result                string `json:"result"`
 	ToKnowledgeCandidate  bool   `json:"to_knowledge_candidate"`
 }
