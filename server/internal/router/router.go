@@ -54,7 +54,7 @@ func Setup(cfg *config.AppConfig, db *gorm.DB, h *Handlers) *gin.Engine {
 	// Recovery 注册在最外层（第一个）以捕获后续所有中间件的 panic。
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestID())
-	r.Use(middleware.CORS(parseCORSOrigins(cfg.CORS.AllowOrigins)))
+	r.Use(middleware.CORS(parseCORSOrigins(cfg.CORS.AllowOrigins), cfg.Server.Mode))
 	r.Use(middleware.Logger())
 
 	// 健康检查端点（无需认证，供 Docker/K8s 存活探针使用）

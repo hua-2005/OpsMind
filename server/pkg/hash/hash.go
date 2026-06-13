@@ -10,8 +10,8 @@ package hash
 
 import (
 	"errors"
-	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -39,30 +39,32 @@ func CheckPassword(hashed, password string) bool {
 }
 
 // ValidatePassword 校验密码是否符合策略要求。
-// 策略：至少一个小写字母、一个大写字母、一个数字，长度 8-32。
+//
+// 策略：长度 8-32 字符、至少一个小写字母、一个大写字母、一个数字。
+// 使用 utf8.RuneCountInString 计算字符数（非字节数），
+// 使用 unicode.IsLower/IsUpper/IsDigit 统一检测逻辑（全 Unicode 范围）。
 func ValidatePassword(password string) error {
-	// TODO(hash): 当前长度用 len(bytes) 计算，含中文或 emoji 时会按字节数限制。
-	// 如果允许非 ASCII 密码，应改用 utf8.RuneCountInString 并明确前端同样规则。
-	if len(password) < 8 {
+	// 长度用 rune 计数，与用户认知一致（中/英/emoji 各算 1 个字符）
+	if n := utf8.RuneCountInString(password); n < 8 {
 		return ErrPasswordTooShort
-	}
-	if len(password) > 32 {
+	} else if n > 32 {
 		return ErrPasswordTooLong
 	}
 
-	hasLower := strings.ContainsAny(password, "abcdefghijklmnopqrstuvwxyz")
-	hasUpper := strings.ContainsAny(password, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	hasDigit := false
+	var hasLower, hasUpper, hasDigit bool
 	for _, r := range password {
-		if unicode.IsDigit(r) {
+		switch {
+		case unicode.IsLower(r):
+			hasLower = true
+		case unicode.IsUpper(r):
+			hasUpper = true
+		case unicode.IsDigit(r):
 			hasDigit = true
-			break
+		}
+		if hasLower && hasUpper && hasDigit {
+			return nil
 		}
 	}
 
-	if !hasLower || !hasUpper || !hasDigit {
-		return ErrPasswordWeak
-	}
-
-	return nil
+	return ErrPasswordWeak
 }

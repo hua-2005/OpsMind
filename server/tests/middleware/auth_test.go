@@ -1,5 +1,3 @@
-//go:build integration
-
 // Package middleware_test 验证 JWT 认证中间件。
 //
 // 测试覆盖 PLAN.md T12 定义的 4 个场景：
@@ -149,4 +147,30 @@ func TestJWTAuth_InvalidToken(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code, "无效令牌应返回 401")
+}
+
+// TestJWTAuth_EmptySecret 验证空 secret 时中间件返回配置错误。
+//
+// 这是纵深防御的最后一道防线——main.go 应在启动阶段拒绝空 secret。
+// 中间件层面返回 500（ErrUnknown），而非 401，原因是这是服务端配置问题而非客户端认证失败。
+func TestJWTAuth_EmptySecret(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+
+	protected := r.Group("/api/v1/protected")
+	protected.Use(middleware.JWTAuth(nil, ""))
+	protected.GET("/me", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/v1/protected/me", nil)
+	req.Header.Set("Authorization", "Bearer some.token.here")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code, "空 secret 应返回 500（服务端配置错误）")
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, float64(99999), resp["code"], "业务码应为 99999（未知错误）")
 }

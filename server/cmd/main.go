@@ -7,7 +7,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -43,22 +42,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 初始化日志持久化：同时输出到 stdout 和旋转日志文件。
-	// 本地开发（go run ./cmd/main.go）working dir 为 server/，默认 ../logs/ → 项目根目录。
-	// Docker 部署通过 OPSMIND_LOG_DIR=./logs 覆盖（见 docker-compose.yml）。
-	// 单文件超过 10MB 自动切换到新文件。
+	// 初始化日志：JSON 格式输出到 stdout + 旋转日志文件。
+	// OPSMIND_LOG_DIR 控制日志目录（见 docker-compose.yml + .env.example）。
 	logDir := os.Getenv("OPSMIND_LOG_DIR")
 	if logDir == "" {
-		logDir = filepath.Join("..", "logs")
+		logDir = filepath.Join("..", "logs") // 本地开发 → 项目根目录 logs/
 	}
-	logWriter, err := opslog.NewRotatingWriter(logDir, 0)
+	logCleanup, err := opslog.Init(logDir)
 	if err != nil {
 		slog.Warn("日志文件输出不可用，仅输出到控制台", "dir", logDir, "error", err)
 	} else {
-		slog.SetDefault(slog.New(slog.NewJSONHandler(
-			io.MultiWriter(os.Stdout, logWriter),
-			&slog.HandlerOptions{Level: slog.LevelInfo},
-		)))
+		defer logCleanup()
 	}
 
 	// 生产模式下 JWT 密钥必须非空，否则拒绝启动。

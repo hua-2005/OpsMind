@@ -15,7 +15,7 @@ import (
 func setupRouter(allowOrigins []string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(middleware.CORS(allowOrigins))
+	r.Use(middleware.CORS(allowOrigins, "debug"))
 	r.GET("/test", func(c *gin.Context) {
 		c.String(200, "ok")
 	})

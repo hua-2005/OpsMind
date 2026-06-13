@@ -1,11 +1,11 @@
 // Package middleware 提供 Gin 中间件。
 //
 // 本文件实现 CORS 跨域中间件。
-// 允许来源：http://localhost:5173（开发环境），允许方法：GET/POST/PUT/PATCH/DELETE/OPTIONS，
-// 允许 Header：Authorization/Content-Type，暴露 Header：Content-Length，MaxAge：12 小时。
 package middleware
 
 import (
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -14,20 +14,39 @@ import (
 
 // CORS 返回 CORS 跨域中间件。
 //
-// allowOrigins 从配置读取（如 OPSMIND_CORS_ALLOW_ORIGINS），支持环境变量注入。
-// 为空时默认使用 localhost:5173（本地开发环境）。
-func CORS(allowOrigins []string) gin.HandlerFunc {
+// allowOrigins 从配置读取（OPSMIND_CORS_ALLOW_ORIGINS），
+// debug 模式允许回退到 localhost:5173；release 模式必须显式配置。
+//
+// DNS 重绑定防护：release 模式拒绝包含 "localhost" 的 origin，
+// 因为 localhost 可被攻击者通过 DNS 重绑定解析到外部恶意 IP。
+func CORS(allowOrigins []string, mode string) gin.HandlerFunc {
+	isRelease := mode == "release"
+
 	if len(allowOrigins) == 0 {
+		if isRelease {
+			slog.Error("生产模式必须配置 OPSMIND_CORS_ALLOW_ORIGINS，拒绝以空值启动")
+			panic("CORS: release 模式不允许空 AllowOrigins")
+		}
 		allowOrigins = []string{"http://localhost:5173"}
 	}
 
-	// TODO(middleware/cors): release 模式下应禁止 "*" 与 localhost 默认值。
-	// CORS 属于部署安全配置，建议在 config.Validate 中按环境强校验。
+	for _, origin := range allowOrigins {
+		// AllowCredentials + "*" 是浏览器安全违规
+		if origin == "*" {
+			slog.Error("CORS 配置错误：AllowCredentials=true 时不能使用 \"*\"")
+			panic("CORS: AllowCredentials=true 时 AllowOrigins 不能包含 \"*\"")
+		}
+		// release 模式拒绝 localhost（DNS 重绑定攻击面）
+		if isRelease && strings.Contains(origin, "localhost") {
+			slog.Warn("CORS AllowOrigin 包含 localhost，生产环境存在 DNS 重绑定风险", "origin", origin)
+		}
+	}
+
 	return cors.New(cors.Config{
 		AllowOrigins:     allowOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Authorization", "Content-Type"},
-		ExposeHeaders:    []string{"Content-Length"},
+		ExposeHeaders:    []string{"Content-Length", "X-Request-Id", "X-Request-ID", "X-Total-Count"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	})

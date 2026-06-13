@@ -15,13 +15,19 @@ import (
 	"opsmind/internal/router"
 )
 
-// setupRouter 创建用于测试的路由引擎
+// setupRouter 创建用于测试的路由引擎。
+//
+// JWT 中间件需要非空 secret 才能正常返回 401（而非因配置错误返回 500），
+// 因此测试必须提供有效的 secret 值。
 func setupRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.AppConfig{
 		Server: config.ServerConfig{
 			Port: 8080,
 			Mode: "test",
+		},
+		JWT: config.JWTConfig{
+			Secret: "test_router_secret",
 		},
 	}
 	return router.Setup(cfg, nil, nil)

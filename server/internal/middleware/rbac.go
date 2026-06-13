@@ -1,4 +1,4 @@
-// Package middleware 实现 Gin HTTP 中间件。
+// Package middleware 实现 Gin HTTP 中间件.
 //
 // rbac.go 提供 RBAC 权限校验中间件。
 // 设计决策：采用 RequirePermission(permissions ...string) 形式而非 RequireRole，
@@ -7,6 +7,9 @@
 package middleware
 
 import (
+	"log/slog"
+	"strings"
+
 	"opsmind/pkg/errcode"
 	"opsmind/pkg/response"
 
@@ -19,10 +22,12 @@ import (
 // 为什么用"任意一个"而非"全部"：大多数场景下接口只需一个权限即可访问，
 // 如需同时满足多个权限，可在业务层做更细粒度的校验。
 func RequirePermission(permissions ...string) gin.HandlerFunc {
+	// 启动时告警：空 permissions 会恒定拒绝所有请求，可能为路由配置遗漏。
+	if len(permissions) == 0 {
+		slog.Warn("RBAC 中间件注册时 permissions 为空，该路由将拒绝所有请求")
+	}
+
 	return func(c *gin.Context) {
-		// TODO(middleware/rbac): permissions 为空时当前逻辑会恒定拒绝。
-		// 建议在启动路由注册时检测空权限配置，避免误把接口配置成不可访问。
-		// 从 context 获取 currentUser
 		val, exists := c.Get("currentUser")
 		if !exists {
 			response.Error(c, errcode.ErrAuth, "未登录")
@@ -37,7 +42,6 @@ func RequirePermission(permissions ...string) gin.HandlerFunc {
 			return
 		}
 
-		// 检查用户是否拥有任意一个所需权限
 		if !hasAnyPermission(currentUser.Permissions, permissions) {
 			response.Error(c, errcode.ErrForbidden, "无权限执行此操作")
 			c.Abort()
@@ -49,16 +53,43 @@ func RequirePermission(permissions ...string) gin.HandlerFunc {
 }
 
 // hasAnyPermission 检查用户权限列表中是否包含任意一个所需权限。
+//
+// 支持两种通配模式：
+//   - "*" 匹配任意权限（等效超级管理员）
+//   - "knowledge:*" 匹配 knowledge:read、knowledge:write 等同前缀权限
+//
+// 通配匹配发生在精确匹配之后（精确匹配优先），使用前缀而非正则避免性能开销。
 func hasAnyPermission(userPerms []string, required []string) bool {
-	// TODO(middleware/rbac): 支持通配权限（如 "knowledge:*"）或权限层级。
-	// 当前必须逐一列出按钮权限，角色权限增多后维护成本会快速上升。
-	permSet := make(map[string]struct{}, len(userPerms))
-	for _, p := range userPerms {
-		permSet[p] = struct{}{}
+	if len(required) == 0 {
+		return false // 安全默认值：无要求 = 谁都不可访问
 	}
+	if len(userPerms) == 0 {
+		return false
+	}
+
+	// 精确匹配
+	permSet := make(map[string]struct{}, len(userPerms))
+	var wildcards []string // 通配前缀，不含尾随 "*"
+	for _, p := range userPerms {
+		if strings.HasSuffix(p, "*") {
+			prefix := strings.TrimRight(p, "*")
+			if prefix == "" {
+				return true // "*" 匹配一切
+			}
+			wildcards = append(wildcards, prefix)
+		} else {
+			permSet[p] = struct{}{}
+		}
+	}
+
 	for _, r := range required {
 		if _, ok := permSet[r]; ok {
 			return true
+		}
+		for _, prefix := range wildcards {
+			if strings.HasPrefix(r, prefix) {
+				return true
+			}
 		}
 	}
 	return false
