@@ -1,6 +1,5 @@
 // Package response 定义申告管理相关响应 DTO。
 //
-// 与 TECH.md §5.2 申告 API 端点对齐。
 // 列表响应包含分页信息，详情响应包含提交人信息和处理记录时间线。
 package response
 

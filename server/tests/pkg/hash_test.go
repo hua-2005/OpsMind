@@ -1,6 +1,6 @@
 // Package pkg_test 测试公共工具包的导出 API。
 //
-// 本文件测试密码哈希和验证工具，确保 bcrypt 哈希和密码策略校验符合 TECH.md §8.3 规范。
+// 本文件测试密码哈希和验证工具。
 package pkg_test
 
 import (

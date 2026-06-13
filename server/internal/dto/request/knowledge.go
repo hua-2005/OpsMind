@@ -1,6 +1,4 @@
 // Package request 定义知识库管理相关的请求结构体。
-//
-// 与 TECH.md §5.2 知识库管理 API 对齐。
 package request
 
 // CreateKBRequest 创建知识库请求。

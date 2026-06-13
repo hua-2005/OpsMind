@@ -1,6 +1,6 @@
 // Package response 定义认证相关的响应结构体。
 //
-// LoginResponse 包含令牌和用户信息，与 TECH.md §5.2 登录响应对齐。
+// LoginResponse 包含令牌和用户信息。
 package response
 
 // LoginResponse 登录响应

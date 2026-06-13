@@ -11,7 +11,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-// TestTicket_Fields 验证 Ticket 模型字段与 TECH.md §4.2 tickets 表定义一致
+// TestTicket_Fields 验证 Ticket 模型字段定义
 func TestTicket_Fields(t *testing.T) {
 	now := time.Now()
 	context := datatypes.JSON(`{"session_id": 1}`)
@@ -64,7 +64,7 @@ func TestTicket_Fields(t *testing.T) {
 	}
 }
 
-// TestTicketRecord_Fields 验证 TicketRecord 模型字段与 TECH.md §4.2 ticket_records 表定义一致
+// TestTicketRecord_Fields 验证 TicketRecord 模型字段定义
 func TestTicketRecord_Fields(t *testing.T) {
 	now := time.Now()
 	detail := datatypes.JSON(`{"callback_method":"phone","is_resolved":true}`)

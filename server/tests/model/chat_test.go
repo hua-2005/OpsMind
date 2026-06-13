@@ -11,7 +11,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-// TestChatSession_Fields 验证 ChatSession 模型字段与 TECH.md §4.2 chat_sessions 表定义一致
+// TestChatSession_Fields 验证 ChatSession 模型字段定义
 func TestChatSession_Fields(t *testing.T) {
 	now := time.Now()
 	sources := datatypes.JSON(`[{"title":"OA文档","url":"http://example.com"}]`)
@@ -48,7 +48,7 @@ func TestChatSession_Fields(t *testing.T) {
 	}
 }
 
-// TestChatMessage_Fields 验证 ChatMessage 模型字段与 TECH.md §4.2 chat_messages 表定义一致
+// TestChatMessage_Fields 验证 ChatMessage 模型字段定义
 func TestChatMessage_Fields(t *testing.T) {
 	now := time.Now()
 	sources := datatypes.JSON(`[{"title":"OA文档"}]`)

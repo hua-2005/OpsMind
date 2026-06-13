@@ -3,9 +3,7 @@
 // storage_client.go 定义 StorageClient 接口和 MinIO 实现。
 // 所有 MinIO 对象存储操作必须通过此适配层，禁止直接 HTTP 调用。
 //
-// 接口与 TECH.md §7.3 完全对齐，包含 3 个方法：
-// Upload / GetPresignedURL / Delete
-//
+// 接口包含 3 个方法：Upload / GetPresignedURL / Delete。
 // Bucket 规划：opsmind-attachments（申告附件）、opsmind-documents（知识文档）。
 // 初始化时自动创建 bucket（MakeBucket）。
 package adapter

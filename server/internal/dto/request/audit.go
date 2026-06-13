@@ -1,6 +1,4 @@
 // Package request 定义审计日志相关请求 DTO。
-//
-// 与 TECH.md §5.2 审计日志 API 端点对齐。
 package request
 
 // AuditLogListRequest 审计日志列表查询请求。

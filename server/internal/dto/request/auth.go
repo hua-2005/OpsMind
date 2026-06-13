@@ -1,6 +1,6 @@
 // Package request 定义认证相关的请求结构体。
 //
-// binding tag 使用 Gin 的 binding 校验器，与 TECH.md §5.2 API 设计对齐。
+// 使用 Gin 的 binding 校验器进行参数校验。
 package request
 
 // LoginRequest 登录请求

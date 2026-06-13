@@ -1,6 +1,4 @@
 // Package response 定义知识库管理相关的响应结构体。
-//
-// 与 TECH.md §5.2 知识库管理 API 对齐。
 package response
 
 import "time"
@@ -66,7 +64,7 @@ type ArticleDetailResponse struct {
 // ChunkResponse 知识切片响应。
 type ChunkResponse struct {
 	// TODO(dto/knowledge): ChunkResponse 已有 kb_id/chunk_index，但缺少 created_at。
-	// 如前端需要展示处理结果时间线，应与 docs/API/knowledge.md 保持完整一致。
+	// 如前端需要展示处理结果时间线，需保持完整字段。
 	ID              int64  `json:"id"`
 	KBID            int64  `json:"kb_id"`
 	Content         string `json:"content"`

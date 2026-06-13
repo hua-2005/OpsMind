@@ -1,4 +1,4 @@
-# 申告生命周期 v2 — 函数级调用链
+# 申告生命周期 — 函数级调用链
 
 > 代码基准：`handler/ticket.go` → `service/ticket_service.go` → `repository/ticket_repo.go` / `service/scheduler.go`
 > 更新于 2026-06-12 — 反映 AutoClose 上移至 Service + TxManager 重构

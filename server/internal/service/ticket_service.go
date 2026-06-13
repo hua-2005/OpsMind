@@ -158,7 +158,7 @@ func (s *TicketService) SupplementTicket(id int64, userID int64, req request.Sup
 
 // UpdateStatus 执行申告状态转换。
 //
-// 状态机规则（与 TECH.md §5.3 action 表对齐）：
+// 状态机规则：
 //
 //	start:        待处理(1) → 处理中(2)
 //	request_info: 处理中(2) → 需补充信息(3)，supplement_count+1，超过3次禁止

@@ -1,6 +1,6 @@
 // Package pkg_test 测试公共工具包的导出 API。
 //
-// 本文件测试错误码常量定义，确保所有错误码符合 TECH.md §5.1 规范。
+// 本文件测试错误码常量定义。
 package pkg_test
 
 import (
@@ -9,7 +9,7 @@ import (
 	"opsmind/pkg/errcode"
 )
 
-// TestErrCodeValues 测试错误码值是否符合 TECH.md 定义
+// TestErrCodeValues 测试错误码值是否符合分段约定
 func TestErrCodeValues(t *testing.T) {
 	tests := []struct {
 		name     string

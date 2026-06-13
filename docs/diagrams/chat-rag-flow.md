@@ -1,4 +1,4 @@
-# 智能问答 RAG 管道 v2 — 函数级调用链
+# 智能问答 RAG 管道 — 函数级调用链
 
 > 代码基准：`handler/chat.go` → `service/chat_service.go` → `rag/pipeline.go` → `adapter/llm_client.go`
 > 更新于 2026-06-12 — 反映 writeSSEEvent / SetWriteDeadline / TxManager 等重构

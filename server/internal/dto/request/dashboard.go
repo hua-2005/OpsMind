@@ -1,6 +1,4 @@
 // Package request 定义数据看板相关请求 DTO。
-//
-// 与 TECH.md §5.2 看板 API 端点对齐。
 package request
 
 // TrendRequest 趋势数据查询请求。

@@ -1,11 +1,8 @@
 // Package middleware 提供 Gin 中间件。
 //
-// 本文件实现 CORS 跨域中间件，配置遵循 TECH.md 规范：
-// - 允许来源：http://localhost:5173（开发环境）
-// - 允许方法：GET/POST/PUT/PATCH/DELETE/OPTIONS
-// - 允许 Header：Authorization/Content-Type
-// - 暴露 Header：Content-Length
-// - MaxAge：12 小时
+// 本文件实现 CORS 跨域中间件。
+// 允许来源：http://localhost:5173（开发环境），允许方法：GET/POST/PUT/PATCH/DELETE/OPTIONS，
+// 允许 Header：Authorization/Content-Type，暴露 Header：Content-Length，MaxAge：12 小时。
 package middleware
 
 import (

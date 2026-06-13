@@ -28,7 +28,7 @@ func (User) TableName() string { return "users" }
 //
 // Permissions 使用 JSONB 存储权限列表，例如 ["ticket:read", "ticket:write"]。
 // 选择 JSONB 而非 text[] 的原因：JSONB 可直接在 Go 中用 datatypes.JSON 序列化/反序列化，
-// 无需自定义 Scanner/Valuer，且与 TECH.md §8.1 定义一致。
+// 无需自定义 Scanner/Valuer。
 type Role struct {
 	ID          int64           `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name        string          `gorm:"type:varchar(64);uniqueIndex;not null" json:"name"`

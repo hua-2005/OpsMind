@@ -1,4 +1,4 @@
-# 认证与 RBAC 权限 v2 — 函数级调用链
+# 认证与 RBAC 权限 — 函数级调用链
 
 > 代码基准：`handler/auth.go` / `middleware/auth.go` / `middleware/rbac.go` / `service/auth_service.go`
 > 更新于 2026-06-12 — TokenType 区分 access/refresh，中间件双令牌校验

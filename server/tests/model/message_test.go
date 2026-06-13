@@ -9,7 +9,7 @@ import (
 	"opsmind/internal/model"
 )
 
-// TestMessage_Fields 验证 Message 模型字段与 TECH.md §4.2 messages 表定义一致
+// TestMessage_Fields 验证 Message 模型字段定义
 func TestMessage_Fields(t *testing.T) {
 	now := time.Now()
 	msg := model.Message{

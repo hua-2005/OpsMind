@@ -1,4 +1,4 @@
-# LLM 配置管理 v2 — 函数级调用链
+# LLM 配置管理 — 函数级调用链
 
 > 代码基准：`handler/llm_config.go` → `service/llm_config_service.go` → `repository/llm_config_repo.go`
 > 更新于 2026-06-12 — 构造函数注入 / APIKey MarshalJSON 自动脱敏 / 事务包裹
@@ -103,11 +103,11 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    subgraph Before["v1: Setter 注入"]
+    subgraph Before["Setter 注入"]
         B1[NewLLMConfigHandler svc] --> B2[handler.SetLLMClient client]
         B2 --> B3["风险: 调用 TestConnection<br/>前未 SetLLMClient → nil panic"]
     end
-    subgraph After["v2: 构造函数注入"]
+    subgraph After["构造函数注入"]
         A1["NewLLMConfigHandler(svc, llmClient)"] --> A2["llmClient 可选传 nil<br/>TestConnection 检查 nil"]
     end
     Before -->|"§6.5 修复"| After

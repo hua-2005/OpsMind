@@ -1,4 +1,4 @@
-# 知识发布管道 v2 — 函数级调用链
+# 知识发布管道 — 函数级调用链
 
 > 代码基准：`handler/knowledge.go` → `service/knowledge_service.go` → `rag/chunker.go` / `rag/embedder.go` / `adapter/vector_store.go`
 > 更新于 2026-06-12 — EmbeddingConfig 死代码已移除，EmbeddingModel 从 KnowledgeBase 读取

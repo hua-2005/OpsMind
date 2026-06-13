@@ -1,8 +1,4 @@
 // Package request 定义用户管理相关的请求结构体。
-//
-// 与 TECH.md §5.2 用户管理 API 对齐：
-// POST /api/v1/admin/users → CreateUserRequest
-// PUT /api/v1/admin/users/:id → UpdateUserRequest
 package request
 
 // CreateUserRequest 创建用户请求。

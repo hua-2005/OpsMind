@@ -1,4 +1,4 @@
-# 文档上传与异步处理 v2 — 函数级调用链
+# 文档上传与异步处理 — 函数级调用链
 
 > 代码基准：`handler/knowledge.go:UploadDocuments` → `service/knowledge_service.go:UploadDocuments` → `rag/document_parser.go` / `rag/processor.go`
 > 更新于 2026-06-12 — 文件校验已移至 Service 层，100MB 读取上限

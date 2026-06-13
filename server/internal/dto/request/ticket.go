@@ -1,6 +1,5 @@
 // Package request 定义申告管理相关请求 DTO。
 //
-// 与 TECH.md §5.2 申告 API 端点对齐。
 // 校验规则：标题、描述、手机号为必填；紧急程度 1-3 范围校验。
 package request
 
@@ -30,7 +29,7 @@ type SupplementTicketRequest struct {
 
 // UpdateTicketStatusRequest 更新申告状态请求。
 //
-// Action 取值与 TECH.md §5.3 action 表对齐：
+// Action 取值：
 //
 //	start        — 待处理(1) → 处理中(2)
 //	request_info — 处理中(2) → 需补充信息(3)，supplement_count +1

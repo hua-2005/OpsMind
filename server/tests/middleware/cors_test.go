@@ -1,6 +1,6 @@
 // Package middleware_test 测试中间件的导出 API。
 //
-// 本文件测试 CORS 中间件配置，确保跨域请求符合 TECH.md 规范。
+// 本文件测试 CORS 中间件的跨域请求配置。
 package middleware_test
 
 import (

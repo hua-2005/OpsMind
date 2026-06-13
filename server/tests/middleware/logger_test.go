@@ -1,6 +1,6 @@
 // Package middleware_test 测试中间件的导出 API。
 //
-// 本文件测试请求日志中间件，确保日志输出符合 TECH.md 规范。
+// 本文件测试请求日志中间件的日志输出。
 package middleware_test
 
 import (

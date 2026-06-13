@@ -2,7 +2,7 @@
 
 // Package repository_test 验证 UserRepo 数据访问层。
 //
-// 测试覆盖 TECH.md §9.2 定义的 5 个方法：GetByID/GetByUsername/GetByPhone/ExistsByPhone/Create。
+// 测试覆盖 5 个核心方法：GetByID/GetByUsername/GetByPhone/ExistsByPhone/Create。
 // 使用独立的 opsmind_test 数据库，每个测试用例通过清理保证隔离性。
 package repository_test
 

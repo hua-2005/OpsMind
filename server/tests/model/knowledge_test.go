@@ -11,7 +11,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-// TestKnowledgeBase_Fields 验证 KnowledgeBase 模型字段与 TECH.md §4.2 knowledge_bases 表定义一致
+// TestKnowledgeBase_Fields 验证 KnowledgeBase 模型字段定义
 func TestKnowledgeBase_Fields(t *testing.T) {
 	now := time.Now()
 	kb := model.KnowledgeBase{
@@ -40,7 +40,7 @@ func TestKnowledgeBase_Fields(t *testing.T) {
 	}
 }
 
-// TestKnowledgeArticle_Fields 验证 KnowledgeArticle 模型字段与 TECH.md §4.2 knowledge_articles 表定义一致
+// TestKnowledgeArticle_Fields 验证 KnowledgeArticle 模型字段定义
 func TestKnowledgeArticle_Fields(t *testing.T) {
 	now := time.Now()
 	tags := datatypes.JSON(`["OA","登录"]`)

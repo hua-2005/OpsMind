@@ -1,6 +1,4 @@
 // Package response 定义审计日志相关响应 DTO。
-//
-// 与 TECH.md §5.2 审计日志 API 端点对齐。
 package response
 
 // AuditLogItem 单条审计日志（含操作人姓名）。

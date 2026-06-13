@@ -3,7 +3,7 @@
 // Package database_test 验证数据库迁移 schema。
 //
 // 本测试在真实 pgvector 实例上执行 001_init.sql 迁移，
-// 验证表结构、字段类型、索引是否符合 TECH.md §3.2 定义。
+// 验证表结构、字段类型、索引是否与模型定义一致。
 //
 // 运行方式（需 Docker pgvector 运行中）：
 //

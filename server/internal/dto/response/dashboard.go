@@ -1,6 +1,4 @@
 // Package response 定义数据看板相关响应 DTO。
-//
-// 与 TECH.md §5.2 看板 API 端点对齐。
 package response
 
 // StatsResponse 看板统计数据。

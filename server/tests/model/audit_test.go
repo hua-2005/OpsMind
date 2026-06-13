@@ -11,7 +11,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-// TestAuditLog_Fields 验证 AuditLog 模型字段与 TECH.md §4.2 audit_logs 表定义一致
+// TestAuditLog_Fields 验证 AuditLog 模型字段定义
 func TestAuditLog_Fields(t *testing.T) {
 	now := time.Now()
 	detail := datatypes.JSON(`{"old_status":1,"new_status":2}`)

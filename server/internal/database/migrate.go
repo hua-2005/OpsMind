@@ -9,7 +9,7 @@ import (
 // AutoMigrate 自动迁移所有数据模型。
 //
 // GORM AutoMigrate 会创建 GORM tag 中声明的索引，但不支持 DESC 排序。
-// TECH.md §4.3 要求以下索引为 DESC：
+// 以下索引需要 DESC 排序：
 //   - idx_tickets_created_at ON tickets(created_at DESC)
 //   - idx_chat_created_at ON chat_sessions(created_at DESC)
 //   - idx_audit_created_at ON audit_logs(created_at DESC)

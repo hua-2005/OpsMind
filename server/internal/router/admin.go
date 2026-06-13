@@ -1,7 +1,6 @@
 // Package router 负责注册 Gin 路由。
 //
-// 本文件注册后台管理路由，与 TECH.md §5.2 后台管理对齐。
-// 所有路由需要 JWT 认证 + RBAC 权限（在 router.go 中统一挂载）。
+// 本文件注册后台管理路由，所有路由需要 JWT 认证 + RBAC 权限（在 router.go 中统一挂载）。
 package router
 
 import (
@@ -13,7 +12,6 @@ import (
 // registerAdminRoutes 注册后台管理路由。
 //
 // 后台管理面向运维人员和管理员，提供申告处理、知识库管理、用户管理等功能。
-// 路由列表与 TECH.md §5.2 后台管理对齐。
 // 已实现 Handler 的路由绑定真实 Handler，未实现的仍使用占位。
 func registerAdminRoutes(rg *gin.RouterGroup, h *Handlers) {
 	// TODO(router/admin): 权限字符串散落在路由注册中，建议集中成常量或权限表。

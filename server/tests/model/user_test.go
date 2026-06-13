@@ -11,7 +11,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-// TestUser_Fields 验证 User 模型字段与 TECH.md §4.2 users 表定义一致
+// TestUser_Fields 验证 User 模型字段定义
 func TestUser_Fields(t *testing.T) {
 	now := time.Now()
 	u := model.User{
@@ -53,7 +53,7 @@ func TestUser_Fields(t *testing.T) {
 	}
 }
 
-// TestRole_Fields 验证 Role 模型字段与 TECH.md §3 roles 表定义一致
+// TestRole_Fields 验证 Role 模型字段定义
 func TestRole_Fields(t *testing.T) {
 	now := time.Now()
 	r := model.Role{
@@ -76,7 +76,7 @@ func TestRole_Fields(t *testing.T) {
 	}
 }
 
-// TestMenu_Fields 验证 Menu 模型字段与 TECH.md §3 menus 表定义一致
+// TestMenu_Fields 验证 Menu 模型字段定义
 func TestMenu_Fields(t *testing.T) {
 	m := model.Menu{
 		Name:      "用户管理",

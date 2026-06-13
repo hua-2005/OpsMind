@@ -1,7 +1,6 @@
 # 请求生命周期 (Request Lifecycle)
 
 > **覆盖模块：** `middleware/` → `router/` → `handler/` → `service/` → `repository/`
-> **对应任务：** T06（中间件）、T07（路由）、T12（JWT）、T13（RBAC）
 
 ---
 

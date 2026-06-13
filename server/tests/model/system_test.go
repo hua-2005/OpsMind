@@ -11,7 +11,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-// TestSystemConfig_Fields 验证 SystemConfig 模型字段与 TECH.md §4.2 system_configs 表定义一致
+// TestSystemConfig_Fields 验证 SystemConfig 模型字段定义
 func TestSystemConfig_Fields(t *testing.T) {
 	now := time.Now()
 	value := datatypes.JSON(`{"threshold":0.6}`)

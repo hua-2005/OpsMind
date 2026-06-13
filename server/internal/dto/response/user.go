@@ -1,6 +1,4 @@
 // Package response 定义用户管理相关的响应结构体。
-//
-// 与 TECH.md §5.2 用户管理 API 对齐。
 package response
 
 // UserListResponse 用户列表响应（含分页）。

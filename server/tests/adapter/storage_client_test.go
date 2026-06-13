@@ -3,7 +3,7 @@
 // 测试覆盖 PLAN.md Task27 定义的 3 个方法：Upload / GetPresignedURL / Delete。
 // 使用本地 MinIO 实例（localhost:9000），不可用时跳过测试。
 //
-// 与 TECH.md §7.3 对齐：
+// 
 // - Bucket 规划：opsmind-attachments（申告附件）、opsmind-documents（知识文档）
 // - 初始化时自动创建 bucket
 package adapter_test

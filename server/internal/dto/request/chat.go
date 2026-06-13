@@ -1,6 +1,4 @@
 // Package request 定义智能问答相关请求 DTO。
-//
-// 与 TECH.md §5.2 问答 API 端点对齐。
 package request
 
 // RAGOptions 检索参数。

@@ -1,7 +1,7 @@
 // Package jwt 提供 JWT 令牌生成、解析和刷新工具。
 //
 // 使用 golang-jwt/v5 库实现，支持访问令牌和刷新令牌。
-// Claims 包含 UserID、Username、Roles，与 TECH.md §9.2 对齐。
+// Claims 包含 UserID、Username、Roles。
 package jwt
 
 import (
