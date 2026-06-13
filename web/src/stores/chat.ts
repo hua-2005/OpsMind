@@ -35,11 +35,21 @@ export interface RAGOptions {
 }
 
 export const useChatStore = defineStore('chat', () => {
-  // TODO(store/chat): messages 没有按 session 持久化，页面刷新或切换路由会丢失当前对话。
-  // 可考虑本地缓存最近会话 ID，再从后端 GetChatDetail 恢复。
+  // 从 sessionStorage 恢复消息（页面刷新不丢失）
+  function loadMessages(): Array<{ id: string; role: string; content: string; sources?: import('@/api/chat').SourceItem[]; isStreaming?: boolean }> {
+    try {
+      const stored = sessionStorage.getItem('opsmind_chat_messages')
+      return stored ? JSON.parse(stored) : []
+    } catch { return [] }
+  }
+  function persistMessages(msgs: typeof messages.value) {
+    try { sessionStorage.setItem('opsmind_chat_messages', JSON.stringify(msgs.slice(-50))) } catch { /* quota exceeded */ }
+  }
+
   // State
   const currentSession = ref<ChatSessionResponse | null>(null)
-  const messages = ref<Array<{ id: string; role: string; content: string; sources?: import('@/api/chat').SourceItem[]; isStreaming?: boolean }>>([])
+  const messages = ref<Array<{ id: string; role: string; content: string; sources?: import('@/api/chat').SourceItem[]; isStreaming?: boolean }>>(loadMessages())
+  let abortController: AbortController | null = null
   const loading = ref(false)
   const streaming = ref(false)  // 是否正在流式输出中
   const selectedKBID = ref<number | null>(null)
@@ -61,8 +71,12 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 发送问题（SSE 流式模式，默认） */
   async function sendQuestion(question: string, kbID: number) {
-    // TODO(store/chat): 没有取消上一个流式请求的 AbortController。
-    // 用户连续发送或离开页面时，旧请求仍可能继续写入 messages。
+    // 取消上一个未完成的流式请求
+    if (abortController) {
+      abortController.abort()
+    }
+    abortController = new AbortController()
+
     loading.value = true
     streaming.value = true
     selectedKBID.value = kbID
@@ -74,7 +88,6 @@ export const useChatStore = defineStore('chat', () => {
 
     // 添加 AI 消息占位（流式填充）
     const aiMsgId = crypto.randomUUID()
-    const aiMsgIndex = messages.value.length
     messages.value.push({
       id: aiMsgId,
       role: 'assistant',
@@ -82,29 +95,25 @@ export const useChatStore = defineStore('chat', () => {
       sources: [],
       isStreaming: true,
     })
+    persistMessages(messages.value)
 
     await streamChatSession(
       {
         question,
         kb_id: kbID,
-        rag_options: ragOptions.value,  // v2: 传递 RAG 高级选项
+        rag_options: ragOptions.value,
       },
       {
         onToken(content: string) {
-          // 逐步追加 token 到 AI 消息
-          const msg = messages.value[aiMsgIndex]
-          if (msg) {
-            msg.content += content
-          }
+          const msg = messages.value.find(m => m.id === aiMsgId)
+          if (msg) { msg.content += content }
         },
         onStep(step) {
-          // v2: 更新当前管道步骤
           currentStep.value = step.label
         },
         onDone(session: ChatSessionResponse) {
-          // 流式完成，更新会话元数据
           currentSession.value = session
-          const msg = messages.value[aiMsgIndex]
+          const msg = messages.value.find(m => m.id === aiMsgId)
           if (msg) {
             msg.content = session.answer
             msg.sources = session.sources
@@ -112,16 +121,15 @@ export const useChatStore = defineStore('chat', () => {
           }
           loading.value = false
           streaming.value = false
-          // v2: 管道指标由 metadata 携带（如果后端支持）
+          abortController = null
+          persistMessages(messages.value)
           if (session.pipeline) {
             pipelineMetrics.value = session.pipeline
           }
         },
         onError(error: string) {
-          // 流式失败时移除占位消息，显示错误
-          // TODO(store/chat): aiMsgIndex 在并发发送时可能已经不是占位消息位置。
-          // 应按 aiMsgId 查找并更新，避免删除错消息。
-          messages.value.splice(aiMsgIndex, 1)
+          const idx = messages.value.findIndex(m => m.id === aiMsgId)
+          if (idx >= 0) messages.value.splice(idx, 1)
           messages.value.push({
             id: crypto.randomUUID(),
             role: 'assistant',
@@ -130,8 +138,11 @@ export const useChatStore = defineStore('chat', () => {
           loading.value = false
           streaming.value = false
           currentStep.value = ''
+          abortController = null
+          persistMessages(messages.value)
         },
-      }
+      },
+      abortController.signal
     )
   }
 
@@ -150,10 +161,12 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function clearSession() {
+    if (abortController) { abortController.abort(); abortController = null }
     currentSession.value = null
     messages.value = []
     currentStep.value = ''
     pipelineMetrics.value = null
+    sessionStorage.removeItem('opsmind_chat_messages')
   }
 
   return {

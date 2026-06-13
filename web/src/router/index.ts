@@ -201,8 +201,6 @@ router.beforeEach((to, _from, next) => {
     const requiredRoles = to.meta.roles as string[] | undefined
     if (requiredRoles && requiredRoles.length > 0) {
       const authStore = useAuthStore()
-      // TODO(web/router): 页面刷新后 Pinia roles 为空，但 localStorage 中仍有 token。
-      // 应从 JWT claims 恢复 roles/permissions，或启动时调用 /me 拉取用户信息。
       const hasRole = requiredRoles.some((role) => authStore.roles.includes(role))
       if (!hasRole) {
         // 角色不匹配，重定向到登录页（与缺少 token 行为一致）

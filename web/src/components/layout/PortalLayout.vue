@@ -16,8 +16,8 @@
           <router-link to="/portal/messages" class="nav-link nav-link--badge" active-class="nav-link--active">
             消息
             <n-badge
-              v-if="unreadCount > 0"
-              :value="unreadCount"
+              v-if="appStore.unreadMessageCount > 0"
+              :value="appStore.unreadMessageCount"
               :max="99"
               size="tiny"
               class="msg-badge"
@@ -42,33 +42,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { NLayout, NLayoutHeader, NLayoutContent, NButton, NIcon, NBadge } from 'naive-ui'
 import { SunnyOutline, MoonOutline } from '@vicons/ionicons5'
 import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
 import { useTheme } from '@/composables/useTheme'
-import { useToast } from '@/composables/useToast'
-import { getUnreadCount } from '@/api/message'
 import { logout as logoutApi } from '@/api/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const appStore = useAppStore()
 const { toggleTheme, isDark } = useTheme()
-const toast = useToast()
-const unreadCount = ref(0)
+
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
-  // TODO(layout/PortalLayout): 未读数只在挂载时加载一次。
-  // 进入消息页标记已读后，顶部角标不会自动刷新，应接入 appStore 或轮询/推送。
-  try {
-    const res = await getUnreadCount()
-    const data = (res as any).data || res
-    unreadCount.value = data?.count ?? data ?? 0
-  } catch (err) {
-    console.error('获取未读消息数失败', err)
-    toast.showToast('消息计数加载失败', 'error')
-  }
+  await appStore.fetchUnreadCount()
+  // 每 30 秒轮询未读消息数
+  pollTimer = setInterval(() => appStore.fetchUnreadCount(), 30000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
 })
 
 function handleLogout() {

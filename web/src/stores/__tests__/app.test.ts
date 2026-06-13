@@ -29,9 +29,9 @@ describe('app store', () => {
       expect(store.sidebarCollapsed).toBe(false)
     })
 
-    it('setUnreadMessageCount should update count', () => {
+    it('setUnreadCount should update count', () => {
       const store = useAppStore()
-      store.setUnreadMessageCount(5)
+      store.setUnreadCount(5)
       expect(store.unreadMessageCount).toBe(5)
     })
   })

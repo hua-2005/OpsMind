@@ -258,11 +258,16 @@ function closeModal() {
   editingId.value = null
 }
 
+function isValidURL(s: string): boolean {
+  try { new URL(s); return true } catch { return false }
+}
+
 async function handleSubmit() {
   if (!form.name) { toast.showToast('名称不能为空', 'error'); return }
   if (!form.base_url) { toast.showToast('Base URL 不能为空', 'error'); return }
-  // TODO(admin/LLMConfig): 提交前应校验 base_url/embedding_base_url 是合法 URL，且 provider_type=1 时提示容器内地址规则。
-  // 直接提交非法 URL 会让后端测试连接或问答阶段才失败。
+  if (!isValidURL(form.base_url)) { toast.showToast('Base URL 格式不正确', 'error'); return }
+  if (form.embedding_base_url && !isValidURL(form.embedding_base_url)) { toast.showToast('Embedding Base URL 格式不正确', 'error'); return }
+  if (form.provider_type === 1 && !form.base_url.includes('://')) { toast.showToast('容器内部署请使用完整 URL（如 http://llama-cpp:8080/v1）', 'error'); return }
   if (!form.llm_model) { toast.showToast('LLM 模型不能为空', 'error'); return }
   if (!form.embedding_model) { toast.showToast('Embedding 模型不能为空', 'error'); return }
 
@@ -296,8 +301,10 @@ async function handleSubmit() {
 }
 
 async function handleTestConnection(cfg: LLMConfigItem) {
-  // TODO(admin/LLMConfig): 测试连接应允许测试正在编辑但未保存的表单配置。
-  // 当前只能测试已保存配置，用户无法在保存前验证 Base URL/API Key。
+  // 如果正在编辑该配置且表单有改动，先保存再测试
+  if (editingId.value && editingId.value === cfg.id) {
+    await doSave()
+  }
   showTestResult.value = true
   testing.value = true
   testResult.value = null
@@ -310,6 +317,20 @@ async function handleTestConnection(cfg: LLMConfigItem) {
   } finally {
     testing.value = false
   }
+}
+
+// 保存表单但不关闭对话框（供测试前自动保存使用）
+async function doSave() {
+  if (!form.name || !form.base_url || !form.llm_model || !form.embedding_model) return
+  const body = {
+    name: form.name, provider_type: form.provider_type, base_url: form.base_url,
+    embedding_base_url: form.embedding_base_url || '', api_key: form.api_key,
+    llm_model: form.llm_model, embedding_model: form.embedding_model,
+    max_tokens: form.max_tokens, vector_dimension: form.vector_dimension, is_default: form.is_default,
+  }
+  try {
+    await updateLLMConfig(editingId.value!, body)
+  } catch { /* 静默保存，测试连接时会报告具体错误 */ }
 }
 
 function confirmDelete(cfg: LLMConfigItem) {

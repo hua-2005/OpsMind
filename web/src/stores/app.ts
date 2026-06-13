@@ -1,26 +1,39 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { getUnreadCount } from '@/api/message'
 
 export const useAppStore = defineStore('app', () => {
-  // TODO(store/app): sidebarCollapsed 和 unreadMessageCount 没有持久化/初始化。
-  // 刷新后侧边栏偏好丢失，未读数也需要从 getUnreadCount 拉取。
-  // State
   const sidebarCollapsed = ref(false)
   const unreadMessageCount = ref(0)
 
-  // Actions
-  const toggleSidebar = () => {
+  function toggleSidebar() {
     sidebarCollapsed.value = !sidebarCollapsed.value
   }
 
-  const setUnreadMessageCount = (count: number) => {
+  async function fetchUnreadCount() {
+    try {
+      const res = await getUnreadCount()
+      const data = (res as any).data || res
+      unreadMessageCount.value = data?.count ?? data ?? 0
+    } catch {
+      // 静默失败，保留上次计数值
+    }
+  }
+
+  function setUnreadCount(count: number) {
     unreadMessageCount.value = count
+  }
+
+  function decrementUnread() {
+    if (unreadMessageCount.value > 0) unreadMessageCount.value--
   }
 
   return {
     sidebarCollapsed,
     unreadMessageCount,
     toggleSidebar,
-    setUnreadMessageCount,
+    fetchUnreadCount,
+    setUnreadCount,
+    decrementUnread,
   }
 })

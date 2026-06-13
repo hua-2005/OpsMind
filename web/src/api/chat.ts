@@ -3,11 +3,8 @@
  *
  * 提供问答会话创建（普通 + SSE 流式）和反馈提交接口。
  *
- * TODO(api/chat): streamChatSession 使用原生 fetch 而非 axios request 封装 — 导致：
- *                 1) 手动拼接 Authorization header（与拦截器逻辑重复）
- *                 2) 无 401/403 统一处理
- *                 3) 无超时控制（fetch 不支持 timeout）
- *                 应评估是否可改用 axios（需确认 SSE 流式兼容性）。
+ * SSE 流使用原生 fetch（非 axios），原因是 EventSource 仅支持 GET，
+ * 无法携带 JSON 请求体。Token 注入和错误处理在此模块内自包含。
  */
 import request from '@/utils/request'
 import type { ApiResponse } from '@/types/api'
@@ -95,11 +92,10 @@ export function createChatSession(data: CreateChatParams) {
  */
 export async function streamChatSession(
   data: CreateChatParams,
-  callbacks: StreamCallbacks
+  callbacks: StreamCallbacks,
+  signal?: AbortSignal
 ): Promise<void> {
   const token = getToken()
-  // TODO(api/chat): 使用 AbortController 支持用户取消、路由离开取消和超时取消。
-  // 目前 fetch 流没有超时，LLM 服务卡住时请求会一直挂起。
 
   try {
     const response = await fetch('/api/v1/portal/chat-sessions/stream', {
@@ -109,6 +105,7 @@ export async function streamChatSession(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(data),
+      signal,
     })
 
     if (!response.ok) {

@@ -163,8 +163,6 @@ function removeTag(index: number) {
 }
 
 async function handleSubmit() {
-  // TODO(portal/TicketSubmit): 提交前应清洗 affected_systems 空值并校验 contact_email 格式。
-  // 后端目前也缺少这些校验，前端可先给用户即时反馈。
   submitError.value = ''
   submitSuccess.value = false
 
@@ -190,7 +188,7 @@ async function handleSubmit() {
       description: form.description.trim(),
       urgency: form.urgency,
       impact_scope: form.impact_scope,
-      affected_systems: form.affected_systems.length > 0 ? form.affected_systems : undefined,
+      affected_systems: form.affected_systems.filter(s => s.trim()).length > 0 ? form.affected_systems.filter(s => s.trim()) : undefined,
       contact_phone: form.contact_phone.trim(),
       contact_email: form.contact_email.trim() || undefined,
       chat_context: form.chat_context || undefined,

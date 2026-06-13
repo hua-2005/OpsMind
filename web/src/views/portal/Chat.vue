@@ -3,6 +3,9 @@
     <div class="chat-container">
       <!-- 知识库选择 -->
       <div class="kb-selector" v-if="knowledgeBases.length > 0">
+    <!-- 知识库错误提示 -->
+    <div v-if="kbError" class="kb-error-banner">{{ kbError }}</div>
+
         <label class="kb-label">选择知识库</label>
         <select v-model="selectedKB" class="kb-select">
           <option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
@@ -17,6 +20,9 @@
       </div>
 
       <!-- v2: RAG 高级设置面板 -->
+    <!-- 知识库为空提示 -->
+    <div v-if="knowledgeBases.length === 0 && !kbError" class="kb-empty-hint">暂无可用知识库</div>
+
       <div v-if="showAdvanced" class="advanced-panel">
         <div class="advanced-row">
           <label class="advanced-label">Top K</label>
@@ -121,20 +127,21 @@ const selectedKB = ref<number | null>(null)
 const knowledgeBases = ref<Array<{ id: number; name: string }>>([])
 const msgListRef = ref<InstanceType<typeof ChatMessageList> | null>(null)
 const showAdvanced = ref(false)
+const kbError = ref('')
 
 onMounted(async () => {
   try {
     const res = await listKnowledgeBasesForPortal()
-    // 后端返回 { items: [...] }，需要提取 items 数组
-    // TODO(portal/Chat): 知识库为空或加载失败时应显示用户可见空状态/错误状态。
-    // 当前只 console.error，用户只会看到输入框禁用但不知道原因。
     const data = (res as any).data || res
     const items = data?.items || data
     knowledgeBases.value = Array.isArray(items) ? items : []
     if (knowledgeBases.value.length > 0) {
       selectedKB.value = knowledgeBases.value[0].id
+    } else {
+      kbError.value = '暂无可用知识库，请联系管理员创建知识库'
     }
   } catch (err) {
+    kbError.value = '加载知识库列表失败，请检查网络连接'
     console.error('加载知识库列表失败', err)
   }
 })

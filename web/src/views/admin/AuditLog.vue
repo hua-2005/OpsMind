@@ -21,28 +21,33 @@
       </table>
       <div v-if="logs.length === 0" class="empty-state"><p>暂无审计日志</p></div>
     </div>
+    <Pagination v-if="total > 0" :total="total" v-model:current-page="currentPage" v-model:page-size="pageSize" @update:current-page="fetchLogs" @update:page-size="fetchLogs" />
   </div>
 </template>
 
 <script setup lang="ts">
-// TODO(admin/AuditLog): page 和 page_size 硬编码 — 应支持分页参数。
 import { ref, onMounted } from 'vue'
 import { listAuditLogs, type AuditLogItem } from '@/api/audit'
 import { useToast } from '@/composables/useToast'
+import Pagination from '@/components/common/Pagination.vue'
 
 const loading = ref(true); const logs = ref<AuditLogItem[]>([])
+const currentPage = ref(1); const pageSize = ref(20); const total = ref(0)
 const toast = useToast()
 
-onMounted(async () => {
+async function fetchLogs() {
+  loading.value = true
   try {
-    const res = await listAuditLogs({ page: 1, page_size: 100 })
-    logs.value = res.data?.items || []
+    const res = await listAuditLogs({ page: currentPage.value, page_size: pageSize.value })
+    logs.value = (res as any).items || res.data?.items || []
+    total.value = (res as any).total || logs.value.length
   } catch (err) {
     console.error('加载审计日志失败', err)
     toast.showToast('加载审计日志失败', 'error')
-  }
-  finally { loading.value = false }
-})
+  } finally { loading.value = false }
+}
+
+onMounted(() => { fetchLogs() })
 
 function formatTime(t?: string) { if (!t) return '-'; return t.substring(0, 19).replace('T', ' ') }
 </script>

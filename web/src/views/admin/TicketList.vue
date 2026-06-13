@@ -1,6 +1,24 @@
 <template>
   <div class="ticket-list-page">
-    <div class="page-header"><h1 class="page-title">申告管理</h1></div>
+    <div class="page-header">
+      <h1 class="page-title">申告管理</h1>
+      <div class="header-filters">
+        <select v-model="statusFilter" @change="fetchTickets" class="filter-select">
+          <option :value="0">全部状态</option>
+          <option :value="1">待处理</option>
+          <option :value="2">处理中</option>
+          <option :value="3">需补充信息</option>
+          <option :value="4">已解决</option>
+          <option :value="5">已关闭</option>
+        </select>
+        <select v-model="urgencyFilter" @change="fetchTickets" class="filter-select">
+          <option :value="0">全部紧急度</option>
+          <option :value="1">低</option>
+          <option :value="2">中</option>
+          <option :value="3">高</option>
+        </select>
+      </div>
+    </div>
     <div v-if="loading" class="loading-state"><p>加载中...</p></div>
     <div v-else class="table-wrapper">
       <table class="data-table">
@@ -21,6 +39,7 @@
       </table>
       <div v-if="tickets.length === 0" class="empty-state"><p>暂无申告</p></div>
     </div>
+    <Pagination v-if="total > 0" :total="total" v-model:current-page="currentPage" v-model:page-size="pageSize" @update:current-page="fetchTickets" @update:page-size="fetchTickets" />
   </div>
 </template>
 
@@ -31,17 +50,27 @@ import type { TicketItem } from '@/api/ticket'
 import { urgencyClass, urgencyText, ticketStatusClass as statusClass } from '@/utils/ticket'
 import { formatDate } from '@/utils/date'
 import { useToast } from '@/composables/useToast'
+import Pagination from '@/components/common/Pagination.vue'
 
 const loading = ref(true); const tickets = ref<TicketItem[]>([])
+const currentPage = ref(1); const pageSize = ref(20); const total = ref(0)
+const statusFilter = ref(0); const urgencyFilter = ref(0)
 const toast = useToast()
 
-onMounted(async () => {
-  // TODO(admin/TicketList): 列表缺少状态/紧急程度筛选和分页控件。
-  // 当前固定 page_size=50，数据量增加后无法浏览全部工单。
-  try { const res = await listAllTickets({ page_size: 50 }) as any; tickets.value = res?.data || res?.items || [] }
-  catch (err) { console.error('加载申告列表失败', err); toast.showToast('加载申告列表失败', 'error') }
+async function fetchTickets() {
+  loading.value = true
+  try {
+    const params: any = { page: currentPage.value, page_size: pageSize.value }
+    if (statusFilter.value > 0) params.status = statusFilter.value
+    if (urgencyFilter.value > 0) params.urgency = urgencyFilter.value
+    const res = await listAllTickets(params) as any
+    tickets.value = res?.data || res?.items || []
+    total.value = res?.total || tickets.value.length
+  } catch (err) { console.error('加载申告列表失败', err); toast.showToast('加载申告列表失败', 'error') }
   finally { loading.value = false }
-})
+}
+
+onMounted(() => { fetchTickets() })
 </script>
 
 <style scoped>

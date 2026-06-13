@@ -126,12 +126,15 @@ async function fetchTrends() {
   if (!trendDateRange.value) return
   trendsLoading.value = true
   const [start, end] = trendDateRange.value
-  // TODO(admin/Dashboard): toISOString 会按 UTC 转日期，东八区凌晨可能出现日期偏移。
-  // 应使用本地日期格式化函数生成 YYYY-MM-DD。
   try {
+    // 使用本地日期格式化，避免 toISOString 在 UTC+8 凌晨出现日期偏移
+    const toLocalDate = (d: number | Date) => {
+      const dt = new Date(d)
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+    }
     const res = await getTrends({
-      start_date: new Date(start).toISOString().slice(0, 10),
-      end_date: new Date(end).toISOString().slice(0, 10),
+      start_date: toLocalDate(start),
+      end_date: toLocalDate(end),
       granularity: 'day',
     })
     const data = (res as any).data || res

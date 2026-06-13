@@ -38,9 +38,11 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { listMessages, markAsRead, type MessageItem } from '@/api/message'
+import { useAppStore } from '@/stores/app'
 import Pagination from '@/components/common/Pagination.vue'
 
 const router = useRouter()
+const appStore = useAppStore()
 const messages = ref<MessageItem[]>([])
 const loading = ref(true)
 const page = ref(1)
@@ -72,13 +74,11 @@ function handlePageChange(newPage: number) {
 }
 
 async function handleClick(msg: MessageItem) {
-  // 标记已读
-  // TODO(portal/Messages): 点击消息后应同步更新全局 unreadMessageCount。
-  // 当前只更新列表，布局角标可能仍显示旧未读数。
   if (!msg.is_read) {
     try {
       await markAsRead(msg.id)
       msg.is_read = true
+      appStore.fetchUnreadCount()
     } catch (err) {
       console.error('标记消息已读失败', err)
     }
