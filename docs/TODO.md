@@ -62,6 +62,7 @@
 - ✅ [service/chat_service.go](/server/internal/service/chat_service.go) — ~~StreamChat done 持久化静默丢错~~ — `UpdateSession`/`CreateBatch` 失败时写入 `slog.Error`。
 - ✅ [service/chat_service.go](/server/internal/service/chat_service.go) + [config/](/server/internal/config/) — ~~RAG 选项硬编码~~ — 新增 `RAGDefaults` 结构体 + env 配置（`OPSMIND_AI_RAG_QUERY_REWRITE` 等 4 项），`ChatService.StreamChat` 从 `s.ragDefaults` 读取管道开关。
 - 🟢 [service/llm_service.go](/server/internal/service/llm_service.go) — 系统 prompt 硬编码在 `buildMessages`（329 行），不支持按知识库定制 AI 角色。
+- 🟢 [service/llm_service.go](/server/internal/service/llm_service.go) — `SyncChat` 为死代码：自会话/对话分离重构后，`ChatService` 仅调用 `StreamChat`，`SyncChat` 无内部调用方。
 
 ### RAG 管道
 
