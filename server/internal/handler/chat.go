@@ -1,8 +1,6 @@
 // Package handler 实现 HTTP 请求处理。
 //
-// chat.go 提供智能问答相关接口（含 SSE 流式输出）。
-// Handler 层职责：参数解析、调用 Service、格式化响应。
-// LLM 调用与 RAG 编排已下沉至 service.LLMService，Handler 仅做 SSE 事件代理。
+// chat.go 提供智能问答接口（含 SSE 流式）。Handler 层仅做参数解析、调用 Service、SSE 事件代理。
 package handler
 
 import (
@@ -37,9 +35,6 @@ func NewChatHandler(svc *service.ChatService) *ChatHandler {
 // CreateChatSession 创建问答会话（仅创建容器，不含 LLM 调用）。
 //
 // POST /api/v1/portal/chat-sessions
-//
-// 会话创建后，通过 StreamChatMessage 在会话中发送消息获取 AI 回复。
-// 这样设计的原因是：会话生命周期与 AI 调用解耦，前端可灵活控制创建时机。
 func (h *ChatHandler) CreateChatSession(c *gin.Context) {
 	var req request.CreateSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -153,9 +148,7 @@ func (h *ChatHandler) GetChatDetail(c *gin.Context) {
 // =============================================================================
 
 // writeSSEEvent 将事件序列化为 JSON 并以 SSE data 帧格式写入。
-//
-// 为什么不用字符串拼接：json.Marshal 自动处理控制字符转义，
-// 消除手动 escapeSSE 的安全隐患。evt 的类型必须有 json 标签与 SSE 格式对齐。
+// 使用 json.Marshal 而非字符串拼接，自动处理控制字符转义。
 func writeSSEEvent(w gin.ResponseWriter, evt any) error {
 	data, err := json.Marshal(evt)
 	if err != nil {
@@ -169,14 +162,7 @@ func writeSSEEvent(w gin.ResponseWriter, evt any) error {
 //
 // POST /api/v1/portal/chat-sessions/:id/stream
 //
-// 与 CreateChatSession 配合使用：先创建会话获取 sessionID，
-// 再通过此端点发送消息并流式接收 AI 回复。
-//
-// 流式输出流程：
-//  1. 解析 session ID + 请求 → 设置 SSE 响应头
-//  2. ChatService.StreamChat 获取事件通道（含 RAG + LLM 流式）
-//  3. 逐事件代理到 SSE（step/token/error/done）
-//  4. 检测客户端断开，及时终止
+// 与 CreateChatSession 配合：先创建会话，再通过此端点流式对话。
 func (h *ChatHandler) StreamChatMessage(c *gin.Context) {
 	idStr := c.Param("id")
 	sessionID, err := strconv.ParseInt(idStr, 10, 64)

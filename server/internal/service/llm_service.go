@@ -1,13 +1,7 @@
-// Package service 实现 LLM 调用与 RAG 检索的统一编排。
+// Package service 实现 RAG 管道 + LLM 调用的统一编排。
 //
-// llm_service.go 将 RAG 管道执行、动态 prompt 构建、LLM 流式/同步调用
-// 封装为一个 LLMService，供 ChatService 统一调度。Handler 不再直接接触
-// LLMClient 接口，符合分层架构约定。
-//
-// 为什么要单独抽出 LLMService 而非放在 ChatService 中：
-// ChatService 关注会话生命周期（创建/保存/查询），LLMService 关注
-// RAG+LLM 的调用编排。两者职责不同，分开后各自更简洁，也便于
-// 模拟 LLMService 对 ChatService 做单元测试。
+// LLMService 封装检索→prompt→LLM 流式/同步调用，供 ChatService 统一调度。
+// 单独拆分的原因是 ChatService 关注会话生命周期，LLMService 关注 RAG+LLM 编排，两者职责不同。
 package service
 
 import (
@@ -35,10 +29,7 @@ type ragPipeline interface {
 // 流式事件类型
 // =============================================================================
 
-// StreamEvent 流式响应中的单个事件。
-//
-// JSON 标签直接对应 SSE 线格式（前端 fetch+ReadableStream 解析器期望的字段）。
-// json.Marshal 后通过 omitempty 自动去掉未使用字段，无需手动拼接 JSON。
+// StreamEvent 流式响应中的单个事件，JSON 标签对应 SSE 线格式。
 type StreamEvent struct {
 	Type     string          `json:"type"`               // "step" | "token" | "done" | "error"
 	Content  string          `json:"content,omitempty"`  // token 文本（type=token）
@@ -84,10 +75,7 @@ type ChatPipelineStep struct {
 // LLMService
 // =============================================================================
 
-// LLMService 封装 RAG 检索 + LLM 调用的统一编排。
-//
-// StreamChat 用于 SSE 流式路径，SyncChat 用于非流式 JSON 路径。
-// 两次调用共享相同的 RAG→prompt→LLM 内核，保证答案一致性。
+// LLMService 封装 RAG + LLM 调用编排。StreamChat 用于 SSE 流式，SyncChat 用于非流式。
 type LLMService struct {
 	llmClient          adapter.LLMClient
 	configMgr          *LLMConfigManager
@@ -97,9 +85,7 @@ type LLMService struct {
 }
 
 // NewLLMService 创建 LLMService 实例。
-//
-// maxHistoryMessages 控制注入 LLM prompt 的历史消息数上限（0=不限制）。
-// llmClient 和 pipeline 可以为 nil（测试或降级场景）。
+// maxHistoryMessages 控制注入 prompt 的历史消息数上限（0=不限制，默认 10）。
 func NewLLMService(llmClient adapter.LLMClient, configMgr *LLMConfigManager, defaultModel string, pipeline ragPipeline, maxHistoryMessages int) *LLMService {
 	if maxHistoryMessages <= 0 {
 		maxHistoryMessages = 10 // 默认最近 10 条消息（约 5 轮 Q&A）
@@ -126,9 +112,7 @@ type SyncChatResult struct {
 }
 
 // SyncChat 执行 RAG 检索 + LLM 同步生成。
-//
-// history 为多轮对话的历史消息（user+assistant），在 RAG 上下文前注入。
-// 用于 POST /api/v1/portal/chat-sessions（非流式 JSON 响应）。
+// history 为多轮对话历史，在 RAG 上下文前注入。
 func (s *LLMService) SyncChat(ctx context.Context, question string, kbID int64, opts rag.RAGOptions, history []adapter.ChatMessage) (*SyncChatResult, error) {
 	start := time.Now()
 
@@ -194,10 +178,8 @@ func (s *LLMService) SyncChat(ctx context.Context, question string, kbID int64, 
 // StreamChat — 流式问答
 // =============================================================================
 
-// StreamChat 执行 RAG 检索 + LLM **流式**生成。
-//
-// history 为多轮对话的历史消息，在 RAG 上下文前注入。
-// 用于 POST /api/v1/portal/chat-sessions/stream（SSE 流式响应）。
+// StreamChat 执行 RAG 检索 + LLM 流式生成，返回事件通道供 SSE 代理。
+// history 为多轮对话历史，在 RAG 上下文前注入。
 func (s *LLMService) StreamChat(ctx context.Context, question string, kbID int64, opts rag.RAGOptions, history []adapter.ChatMessage) (<-chan StreamEvent, error) {
 	eventCh := make(chan StreamEvent, 100)
 
@@ -341,10 +323,8 @@ func (s *LLMService) executeRAG(ctx context.Context, question string, kbID int64
 	return nil, nil, nil
 }
 
-// buildMessages 将 RAG chunk 和历史对话注入系统提示词，构建 LLM 请求消息。
-//
-// history 为多轮对话历史（按时间正序）。使用滑动窗口截断最近 N 条消息
-//（由 maxHistoryMessages 控制），避免长对话撑爆 LLM 上下文窗口。
+// buildMessages 将 RAG chunk 和历史对话构建为 LLM 请求消息。
+// history 按滑动窗口截断（maxHistoryMessages 控制），避免长对话超出上下文窗口。
 func (s *LLMService) buildMessages(chunks []rag.RetrievalResult, question string, history []adapter.ChatMessage) []adapter.ChatMessage {
 	systemPrompt := "你是一个运维知识助手。根据以下知识库内容回答用户问题。如果知识库中没有相关信息，请如实说明。"
 	var ctxBuilder strings.Builder

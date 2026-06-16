@@ -1,12 +1,6 @@
 // Package service 实现智能问答业务逻辑。
 //
-// ChatService 使用自建 RAG Pipeline（查询改写→多路检索→混合检索→重排序）
-// 和 LLMService 进行知识增强问答生成，支持 SSE 流式输出。
-//
-// 会话与对话分离设计：
-// CreateSession 仅创建会话容器，不触发 LLM。StreamChat 在已有会话中
-// 发送消息并流式返回 AI 答案。这样的好处是职责单一、前端可灵活控制
-// 会话生命周期（如先创建会话占位，再异步发送消息）。
+// 会话与对话分离：CreateSession 仅创建容器，StreamChat 在已有会话中流式返回 AI 答案。
 package service
 
 import (
@@ -84,10 +78,7 @@ func NewChatService(knowledgeRepo chatKnowledgeRepo, chatRepo chatSessionRepo, p
 // =============================================================================
 
 // CreateSession 创建问答会话（仅创建容器，不含 LLM 调用）。
-//
-// 为什么创建和对话分开：前端先创建会话获得 sessionID，
-// 再通过 StreamChat 发送消息。职责分离使会话生命周期可控，
-// 也避免了非流式端点中 LLM 调用超时阻塞 HTTP 请求的问题。
+// 与 StreamChat 分离的原因是：会话生命周期与 AI 调用解耦，避免 LLM 超时阻塞 HTTP 请求。
 func (s *ChatService) CreateSession(req request.CreateSessionRequest, userID int64) (*model.ChatSession, error) {
 	if s.knowledgeRepo != nil {
 		if _, err := s.knowledgeRepo.FindKBByID(req.KBID); err != nil {
@@ -119,13 +110,8 @@ func (s *ChatService) CreateSession(req request.CreateSessionRequest, userID int
 // StreamChat — 流式对话（在已有会话中）
 // =============================================================================
 
-// StreamChat 在已有会话中发送消息并以流式事件通道返回 AI 答案。
-//
-// 会话必须已通过 CreateSession 创建。历史消息自动加载并注入 LLM 上下文。
-// 流的 done 事件触发时，自动持久化 user+assistant 消息到 chat_messages 表，
-// 并更新 chat_sessions 的 answer/confidence/duration_ms 字段。
-//
-// 单次 LLM 调用：用户看到的 token 与存入 DB 的答案完全一致。
+// StreamChat 在已有会话中发送消息并流式返回 AI 答案。
+// done 事件时自动持久化 user+assistant 消息并更新会话摘要。
 func (s *ChatService) StreamChat(ctx context.Context, sessionID int64, question string, userID int64) (<-chan StreamEvent, error) {
 	if strings.TrimSpace(question) == "" {
 		return nil, errcode.AppError{Code: errcode.ErrParam, Message: "问题不能为空"}
@@ -152,7 +138,6 @@ func (s *ChatService) StreamChat(ctx context.Context, sessionID int64, question 
 	for _, m := range msgs {
 		history = append(history, adapter.ChatMessage{Role: m.Role, Content: m.Content})
 	}
-
 	opts := rag.RAGOptions{
 		TopK:         s.defaultTopK,
 		QueryRewrite: true,
