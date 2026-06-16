@@ -34,19 +34,18 @@ type Retriever interface {
 
 // RAGOptions 控制 RAG 管道各步骤的开关和参数。
 //
-// 所有字段均可选，零值由 Normalize() 填充为默认值。
-// 调用方应优先使用 DefaultRAGOptions() 或显式设置所有字段后调用 Normalize()。
+// Normalize() 在 Execute 入口自动填充 int 零值（TopK/RouteCount/RerankCount）。
+// bool 字段无法自动填充——零值 false 无法区分"未传"和"显式关"。
+// 调用方必须以 DefaultRAGOptions() 为起点再覆盖，禁止从裸 RAGOptions{} 直接使用。
 type RAGOptions struct {
-	// TODO(rag/types): bool 零值无法表达"未传则默认 true"和"用户显式 false"的区别。
-	// 请求层需要用 *bool 或先 DefaultRAGOptions 再覆盖，否则默认选项容易被零值关闭。
-	TopK          int                  `json:"top_k"`          // 最终返回的检索结果数，默认 5
-	QueryRewrite  bool                 `json:"query_rewrite"`  // 是否启用查询改写
-	MultiRoute    bool                 `json:"multi_route"`    // 是否启用多路检索（生成子查询）
-	Hybrid        bool                 `json:"hybrid"`         // 是否启用 BM25+向量混合检索
-	Rerank        bool                 `json:"rerank"`         // 是否启用重排序
-	RouteCount    int                  `json:"route_count"`    // 多路检索生成的子查询数，默认 3
-	RerankCount   int                  `json:"rerank_count"`   // 送入重排序的候选数，默认 topK*3
-	History       []map[string]string  `json:"-"`              // 对话历史（不入 JSON），用于查询改写上下文消歧；仅 role="user"|"assistant" 的条目有效
+	TopK          int                  `json:"top_k"`          // 返回结果数，默认 5（零值由 Normalize 填充）
+	QueryRewrite  bool                 `json:"query_rewrite"`  // 查询改写开关（调用方须显式设置）
+	MultiRoute    bool                 `json:"multi_route"`    // 多路检索开关
+	Hybrid        bool                 `json:"hybrid"`         // BM25 混合检索开关
+	Rerank        bool                 `json:"rerank"`         // 重排序开关
+	RouteCount    int                  `json:"route_count"`    // 子查询数，默认 3（零值由 Normalize 填充）
+	RerankCount   int                  `json:"rerank_count"`   // 重排序候选数，默认 topK*3（零值由 Normalize 填充）
+	History       []map[string]string  `json:"-"`              // 对话历史（不入 JSON），用于查询改写上下文消歧
 }
 
 // DefaultRAGOptions 返回默认的 RAG 检索选项。
