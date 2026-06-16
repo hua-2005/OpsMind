@@ -41,6 +41,7 @@ OpsMind 采用**单体分层架构（Modular Monolith）**，按 Handler → Ser
 - 职责：业务逻辑、状态机校验、事务编排、跨模块调用
 - 消费者接口模式：每个 Service 定义它所需的依赖接口，隐式满足而非显式声明
 - LLM 配置通过 `atomic.Value` 热替换
+- **LLMService**（`service/llm_service.go`）：RAG 检索 + 动态 prompt 构建 + LLM 流式/同步调用统一编排。`StreamChat` 用于 SSE 流式路径，`SyncChat` 用于非流式 JSON 路径。ChatService 通过 LLMService 间接使用 LLMClient，不再直接持有适配层引用。
 
 ### 2.3 Repository 层
 
@@ -59,6 +60,7 @@ OpsMind 采用**单体分层架构（Modular Monolith）**，按 Handler → Ser
 | `hybrid.go` | RRF 融合（向量 + BM25） |
 | `bm25.go` | Okapi BM25 算法（gse 中文分词） |
 | `rerank.go` | LLM 重排序 |
+| `retriever.go` | VectorRetriever（embedder + vector store 包装） |
 | `chunker.go` | RecursiveCharacterTextSplitter 分块 |
 | `embedder.go` | 批量 Embedding 生成 |
 | `document_parser.go` | PDF/DOCX/MD/TXT 多格式解析 |
@@ -74,7 +76,7 @@ OpsMind 采用**单体分层架构（Modular Monolith）**，按 Handler → Ser
 | `LLMClient` | `OpenAIClient` | ChatCompletion + ChatCompletionStream |
 | `EmbeddingClient` | `OpenAIEmbeddingClient` | `/v1/embeddings` |
 | `VectorStore` | `PgvectorStore` | pgvector batch insert / cosine search / delete |
-| `StorageClient` | `MinIOClient` | 对象上传 / presigned URL / 删除 |
+| `StorageClient` | `MinIOClient` | 对象上传/下载 / presigned URL / 删除 |
 
 ## 3. 数据库设计
 
@@ -105,12 +107,12 @@ OpsMind 采用**单体分层架构（Modular Monolith）**，按 Handler → Ser
 ### 3.3 文章状态机
 
 ```
-草稿(1) → 待审核(2) → 已发布(3) → 已停用(4)
-           ↓
-        驳回(5)
+草稿(1) → 待审核(2) → 审核通过(3) → 已发布(4) → 已停用(0)
+              ↓
+           驳回(5)
 ```
 
-对应 `model/enums.go`：ArticleStatusDraft=1, ArticleStatusReviewing=2, ArticleStatusPublished=3, ArticleStatusDisabled=4, ArticleStatusRejected=5
+对应 `model/enums.go`：ArticleStatusDisabled=0, ArticleStatusDraft=1, ArticleStatusReviewing=2, ArticleStatusApproved=3, ArticleStatusPublished=4, ArticleStatusRejected=5
 
 文档处理状态：`chunking → embedding → indexing → completed`（失败 → `failed`，可重试）
 
@@ -253,11 +255,11 @@ server/
 │   ├── database/                   # GORM 连接 + AutoMigrate
 │   ├── middleware/                  # JWT / RBAC / CORS / Logger / RequestID
 │   ├── router/                     # 路由注册（public/portal/admin 三组）
-│   ├── handler/                    # HTTP Handler 层（10 个模块 + common.go）
-│   ├── service/                    # 业务逻辑层（12 个服务 + LLM 配置管理）
-│   ├── repository/                 # 数据访问层（9 个 Repo + pagination.go）
-│   ├── model/                      # GORM 数据模型（12 个文件）
-│   ├── rag/                        # RAG 引擎（11 个文件）
+│   ├── handler/                    # HTTP Handler 层（11 个模块 + common.go）
+│   ├── service/                    # 业务逻辑层（12 个服务 + tx_manager.go + scheduler.go）
+│   ├── repository/                 # 数据访问层（10 个 Repo + pagination.go）
+│   ├── model/                      # GORM 数据模型（10 个文件）
+│   ├── rag/                        # RAG 引擎（12 个文件）
 │   ├── adapter/                    # 外部适配层（LLM/Embedding/pgvector/MinIO）
 │   └── dto/                        # 请求/响应 DTO
 ├── pkg/                            # 公共工具（errcode/jwt/hash/response）
@@ -266,7 +268,7 @@ server/
 
 web/
 ├── src/
-│   ├── api/                        # Axios API 封装（15 个文件）
+│   ├── api/                        # Axios API 封装（12 个文件）
 │   ├── stores/                     # Pinia 状态管理（auth/chat/app）
 │   ├── router/                     # Vue Router + 路由守卫
 │   ├── views/                      # 页面（auth/portal/admin）

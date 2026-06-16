@@ -1,15 +1,16 @@
 # 智能问答 RAG 管道 — 函数级调用链
 
-> 代码基准：`handler/chat.go` → `service/chat_service.go` → `rag/pipeline.go` → `adapter/llm_client.go`
-> 更新于 2026-06-12 — 反映 writeSSEEvent / SetWriteDeadline / TxManager 等重构
+> 代码基准：`handler/chat.go` → `service/chat_service.go` → `service/llm_service.go` → `rag/pipeline.go` → `adapter/llm_client.go`
+> 更新于 2026-06-16 — SSE 流式重构：LLMService 统一编排 RAG+LLM，单次调用保证流式/存储答案一致
 
 ## 1. SSE 流式问答 — 完整函数调用链
 
 ```mermaid
 sequenceDiagram
     actor U as 用户
-    participant CH as ChatHandler.StreamChatSession<br/>handler/chat.go:139
-    participant CS as ChatService.CreateChatSession<br/>service/chat_service.go:82
+    participant CH as ChatHandler.StreamChatSession<br/>handler/chat.go:120
+    participant CS as ChatService.StreamChat<br/>service/chat_service.go:223
+    participant LS as LLMService.StreamChat<br/>service/llm_service.go:186
     participant KR as KnowledgeRepo.FindKBByID<br/>repository/knowledge_repo.go
     participant Pipe as Pipeline.Execute<br/>rag/pipeline.go:52
     participant QR as QueryRewrite<br/>rag/query_rewrite.go
@@ -26,8 +27,9 @@ sequenceDiagram
     CH->>CH: c.ShouldBindJSON(&CreateChatRequest)
     CH->>CH: getCurrentUserID(c) → (userID, bool)
     CH->>CH: Set SSE headers + c.Status(200)
+    CH->>CH: c.Request.Context() → ctx
 
-    CH->>CS: CreateChatSession(req, userID)
+    CH->>CS: StreamChat(ctx, req, userID)
 
     Note over CS: === 1. 参数校验 ===
     CS->>CS: strings.TrimSpace(req.Question) — 非空校验
@@ -35,8 +37,11 @@ sequenceDiagram
     KR->>DB: SELECT FROM knowledge_bases WHERE id=?
     DB-->>KR: *KnowledgeBase
 
-    Note over CS,Pipe: === 2. RAG 管道 (Pipeline.Execute) ===
-    CS->>Pipe: Execute(ctx, question, kbID, RAGOptions{<br/>TopK, QueryRewrite, MultiRoute, Hybrid, Rerank}, nil)
+    Note over CS,LS: === 2. RAG 管道 + LLM 流式 (单次调用) ===
+    CS->>LS: StreamChat(ctx, question, kbID, opts)
+
+    Note over LS,Pipe: === 2a. RAG 检索 ===
+    LS->>Pipe: Execute(ctx, question, kbID, RAGOptions{TopK,...}, nil)
 
     alt QueryRewrite = true
         Pipe->>QR: rewrite(ctx, question, history)
@@ -72,38 +77,38 @@ sequenceDiagram
         LLM-->>RR: rerankOrder
     end
 
-    Pipe-->>CS: *RAGResult{Chunks []RetrievalResult, Metrics}
+    Pipe-->>LS: *RAGResult{Chunks []RetrievalResult, Metrics}
 
-    Note over CS,LLM: === 3. LLM 生成 ===
-    CS->>CS: 构造 SystemPrompt + ContextBuilder (全部 chunk)
-    CS->>CS: 置信度 = max(pipelineChunks[].Score)
+    Note over LS,LLM: === 2b. 构建 prompt + LLM 流式生成 ===
+    LS->>LS: buildMessages(chunks, question) → [system, user]
+    LS->>LS: getModelConfig() → model + maxTokens
 
-    alt LLM 可用
-        CS->>LLM: ChatCompletion(ctx, ChatRequest{Model, Messages, MaxTokens, Temperature:0.3})
-        LLM-->>CS: ChatResponse{Content, FinishReason}
-    else LLM 不可用
-        CS->>CS: fallbackAIUnavailable + canSubmit=true
+    LS->>LLM: ChatCompletionStream(ctx, ChatRequest{Model, Messages, MaxTokens, Temperature:0.3})
+
+    loop 逐 token（实时 SSE）
+        LLM-->>LS: StreamChunk{Content, FinishReason}
+        LS->>LS: answerBuf.WriteString(chunk.Content)
+        LS->>LS: eventCh ← StreamEvent{Type:"token", Content}
     end
 
-    Note over CS: === 4. 保存会话 ===
-    CS->>CR: Create(&ChatSession{UserID, KBID, Question, Answer, Confidence, DurationMs})
+    LS->>LS: extractSources + maxConfidence
+    LS->>LS: eventCh ← StreamEvent{Type:"done", Metadata:{Answer, Sources, Confidence, DurationMS}}
+
+    LS-->>CS: eventCh (通过 channel 代理事件)
+
+    Note over CS: === 3. 会话持久化（done 事件时） ===
+    CS->>CS: done 事件 → 填充 SessionID/Question/Feedback/CreatedAt
+    CS->>CR: Create(&ChatSession{UserID, KBID, Question, Answer, Sources, Confidence, DurationMs})
     CR->>DB: INSERT INTO chat_sessions
 
-    CS-->>CH: *ChatSessionResponse{SessionID, Answer, Sources, Confidence}
-
-    Note over CH: === 5. SSE 流式输出 ===
-    CH->>LLM: ChatCompletionStream(ctx, streamReq)
-    Note over CH: http.NewResponseController(c.Writer)
-
-    loop 逐 token
-        LLM-->>CH: StreamChunk{Content, FinishReason}
-        CH->>CH: writeSSEEvent(w, sseEvent{Type:"token", Content})
+    Note over CH: === 4. SSE 事件代理 ===
+    loop 逐事件 (step/token/error/done)
+        CS-->>CH: StreamEvent (通过 outCh channel)
+        CH->>CH: writeSSEEvent(w, evt)
         CH->>CH: flusher.Flush()
         CH->>CH: rc.SetWriteDeadline(now + 30s)
     end
 
-    CH->>CH: json.Marshal(resp) → metadataJSON
-    CH->>CH: writeSSEEvent(w, sseEvent{Type:"done"})
     CH-->>U: SSE stream complete
 ```
 
@@ -112,18 +117,22 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor U as 用户
-    participant CH as ChatHandler.CreateChatSession<br/>handler/chat.go:49
+    participant CH as ChatHandler.CreateChatSession<br/>handler/chat.go:40
     participant CS as ChatService.CreateChatSession<br/>service/chat_service.go:82
+    participant LS as LLMService.SyncChat<br/>service/llm_service.go:111
     participant Pipe as Pipeline.Execute
     participant LLM as OpenAIClient.ChatCompletion
     participant CR as ChatRepo.Create
 
     U->>CH: POST /api/v1/portal/chat-sessions
     CH->>CS: CreateChatSession(req, userID)
-    CS->>Pipe: Execute(ctx, question, kbID, opts, nil)
-    Pipe-->>CS: *RAGResult
-    CS->>LLM: ChatCompletion(ctx, ChatRequest)
-    LLM-->>CS: ChatResponse
+    CS->>LS: SyncChat(ctx, question, kbID, opts)
+    LS->>Pipe: Execute(ctx, question, kbID, opts, nil)
+    Pipe-->>LS: *RAGResult
+    LS->>LS: buildMessages(chunks, question)
+    LS->>LLM: ChatCompletion(ctx, ChatRequest)
+    LLM-->>LS: ChatResponse
+    LS-->>CS: *SyncChatResult{Answer, Sources, Confidence, Pipeline}
     CS->>CR: Create(session)
     CS-->>CH: *ChatSessionResponse
     CH-->>U: 200 {code:0, data:{session_id, answer, sources, confidence}}
@@ -162,7 +171,7 @@ flowchart TD
     Rerank_LLM -->|fail| Rerank_DG[降级：RRF 排序结果]
     Rerank_DG --> LLMGen
 
-    LLMGen -->|OK| Done([返回 ChatSessionResponse])
+    LLMGen -->|OK| Done([返回答案])
     LLMGen -->|fail ❌| LLMFail[返回 code=20001 ErrAIUnavailable]
 
     style VRFail fill:#ef444420,stroke:#ef4444

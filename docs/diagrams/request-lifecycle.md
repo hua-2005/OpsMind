@@ -24,6 +24,7 @@ sequenceDiagram
     Client->>Gin: HTTP Request
 
     Note over Gin: 全局中间件链 (router.go:Setup)
+    Gin->>REC: Recovery() (最外层，捕获后续中间件 panic)
     Gin->>RID: RequestID()
     RID->>RID: 生成/透传 X-Request-ID (UUID)
     Gin->>CORS: CORS()

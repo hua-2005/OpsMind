@@ -68,7 +68,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 // ChangePassword 处理修改密码请求。
 //
-// POST /api/v1/auth/change-password
+// POST /api/v1/auth/me/change-password
 // 从 JWT context 获取当前用户 ID（由认证中间件写入）。
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	var req request.ChangePasswordRequest
@@ -100,7 +100,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 
 // Logout 处理退出登录请求。
 //
-// POST /api/v1/auth/logout
+// POST /api/v1/auth/me/logout
 // MVP 阶段无状态 JWT，客户端清除 token 即可，服务端直接返回成功。
 func (h *AuthHandler) Logout(c *gin.Context) {
 	// TODO(handler/auth): 如果后续引入 jti/token_version，Logout 应让当前 refresh token 失效。

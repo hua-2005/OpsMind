@@ -44,7 +44,8 @@ flowchart TB
 
     subgraph Service["Service 层 service/"]
         AuthSvc["AuthService<br/>Login / RefreshToken"]
-        ChatSvc["ChatService<br/>CreateChatSession → pipeline.Execute + llmClient.ChatCompletion"]
+        LLMService["LLMService<br/>StreamChat / SyncChat → RAG + prompt + LLM 统一编排"]
+        ChatSvc["ChatService<br/>会话生命周期管理（创建/查询/反馈）"]
         KnowledgeSvc["KnowledgeService<br/>Publish → chunker.Split + embedder.Embed + store.BatchInsert"]
         TicketSvc["TicketService<br/>UpdateStatus → 状态机校验"]
         UserSvc["UserService / RoleService"]

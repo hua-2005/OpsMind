@@ -427,7 +427,7 @@
 |----------|-----------|--------|
 | [pkg/response/response.go:43](/server/pkg/response/response.go) | 错误响应应带 `request_id` | §8 日志与错误 |
 | [pkg/response/response.go:54](/server/pkg/response/response.go) | 分页响应格式不统一 | §8 日志与错误 |
-| [service/chat_service.go:175](/server/internal/service/chat_service.go) | LLM 生成失败应返回 ErrAIUnavailable，而非保存兜底答案为成功 | §2 智能问答 |
+| [service/llm_service.go:139](/server/internal/service/llm_service.go) | LLM 生成失败应返回 ErrAIUnavailable，而非保存兜底答案为成功（SSE 重构后移至 LLMService） | §2 智能问答 |
 | [service/config_service.go:37](/server/internal/service/config_service.go) | Config key whitelist and type definitions needed | §8 配置管理 |
 | [service/config_service.go:62](/server/internal/service/config_service.go) | 更新 ai 配置项未同步到运行时 | §8 配置管理 |
 | [handler/ticket.go:60](/server/internal/handler/ticket.go) | ListByUser should reuse parsePagination | §4 申告管理 |
