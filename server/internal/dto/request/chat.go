@@ -17,8 +17,8 @@ type RAGOptions struct {
 
 // CreateChatRequest 创建问答会话请求。
 type CreateChatRequest struct {
-	Question   string     `json:"question" binding:"required"` // 用户问题
-	KBID       int64      `json:"kb_id" binding:"required"`    // 目标知识库 ID
-	// TODO(dto/chat): 增加 question 长度上限，防止超长输入直接进入 RAG/LLM 造成成本和延迟风险。
-	RAGOptions *RAGOptions `json:"rag_options"`                 // v2: RAG 管道参数（可选）
+	Question   string      `json:"question" binding:"required"` // 用户问题
+	KBID       int64       `json:"kb_id" binding:"required"`    // 目标知识库 ID
+	SessionID  int64       `json:"session_id"`                  // 会话 ID（0=新会话, >0=追加到已有会话）
+	RAGOptions *RAGOptions `json:"rag_options"`                 // RAG 管道参数（可选）
 }

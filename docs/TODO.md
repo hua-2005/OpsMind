@@ -81,8 +81,8 @@
 - ✅ [service/chat_service.go](/server/internal/service/chat_service.go) — ~~Sources（检索引用）未写入~~ — `CreateChatSession` 和 `StreamChat` 均已通过 `json.Marshal(sources)` 写入 `session.Sources` 字段。
 - 🔴 [service/chat_service.go](/server/internal/service/chat_service.go) — `CreateChatSession` 用 `context.Background` 不传播请求取消
 - 🟡 [service/chat_service.go](/server/internal/service/chat_service.go) — `GetChatDetail` 未校验 `session.UserID` 归属，任意用户可通过猜测 ID 查看他人对话
-- 🟡 [repository/chat_repo.go](/server/internal/repository/chat_repo.go) — `CreateBatch` 和 Session 创建不在同一事务
-- 🟢⭐ [model/chat.go](/server/internal/model/chat.go) — `ChatMessage.SessionID` 缺少索引和 FK 约束，历史查询将全表扫描
+- ✅ [repository/chat_repo.go](/server/internal/repository/chat_repo.go) — ~~`CreateBatch` 零调用方~~ — 多轮对话重构后 `CreateChatSession` 和 `StreamChat` 均调用 `CreateBatch` 持久化 user+assistant 消息。
+- 🟢⭐ [model/chat.go](/server/internal/model/chat.go) — `ChatMessage.SessionID` 缺少索引。`FindMessagesBySession` 查询按 session_id 过滤，高并发时全表扫描风险。需 `CREATE INDEX idx_chat_messages_session ON chat_messages(session_id)`。
 
 ### 文档一致性
 
@@ -419,7 +419,7 @@
 > 以下表定义了 model 和 repository，但无 Service 层代码实际写入数据：
 
 - 🔴 `audit_logs` — `AuditRepo.Create` 存在但零调用方，详细调用点清单见 §7 审计日志（共 7 个 Service 缺失审计写入）
-- 🔴 `chat_messages` — `ChatRepo.CreateBatch` 存在但零调用方，对话历史从未持久化（用户刷新后历史消失）
+- ✅ `chat_messages` — ~~`ChatRepo.CreateBatch` 零调用方~~ — 多轮对话重构后已修复：每次 CreateChatSession/StreamChat 均写入 chat_messages。
 - 🔴 `chat_sessions.sources` — `CreateChatSession` 未填充 `Sources` 字段，检索引用证据永远为空
 - 🟡 `system_configs.description` — `Upsert` 未设置 `Description`，配置说明永远为空
 

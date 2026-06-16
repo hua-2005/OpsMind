@@ -30,6 +30,7 @@ Content-Type: application/json
 {
   "question": "如何重置 VPN 密码？",
   "kb_id": 1,
+  "session_id": 0,
   "rag_options": {
     "top_k": 5,
     "query_rewrite": true,
@@ -44,12 +45,15 @@ Content-Type: application/json
 |------|------|------|------|
 | question | string | ✓ | 用户问题 |
 | kb_id | int64 | ✓ | 目标知识库 ID |
+| session_id | int64 | | 会话 ID（0=新会话, >0=追加到已有会话实现多轮对话） |
 | rag_options | object | | RAG 管道选项（不传则使用默认值） |
 | rag_options.top_k | int | | 最终返回的分块数，默认 5，范围 1-20 |
 | rag_options.query_rewrite | bool | | 是否启用查询改写，默认 true |
 | rag_options.multi_route | bool | | 是否启用多路检索，默认 true |
 | rag_options.hybrid | bool | | 是否启用 BM25 混合检索，默认 true |
 | rag_options.rerank | bool | | 是否启用重排序，默认 true |
+
+> **多轮对话：** `session_id > 0` 时，系统加载该会话的历史消息作为 LLM 上下文，新消息追加到已有会话。消息持久化到 `chat_messages` 表。
 
 **SSE 事件流：**
 
@@ -228,7 +232,40 @@ GET /api/v1/portal/chat-sessions/:id
 Authorization: Bearer <token>
 ```
 
-**响应：** 同创建会话响应
+**响应：** 同创建会话响应，额外包含 `messages` 字段（多轮对话历史）：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "session_id": 42,
+    "question": "如何重置 VPN 密码？",
+    "answer": "VPN 密码重置步骤：1. 登录自助平台...",
+    "sources": [{"doc_name": "VPN FAQ", "chunk_content": "...", "confidence": 0.85}],
+    "confidence": 0.85,
+    "can_submit_ticket": false,
+    "duration_ms": 3200,
+    "feedback": 0,
+    "created_at": "2026-06-16 10:30:00",
+    "messages": [
+      {"id": 1, "role": "user", "content": "如何重置 VPN 密码？", "confidence": 0, "created_at": "2026-06-16 10:30:00"},
+      {"id": 2, "role": "assistant", "content": "VPN 密码重置步骤：...", "sources": [...], "confidence": 0.85, "created_at": "2026-06-16 10:30:02"},
+      {"id": 3, "role": "user", "content": "第二步具体怎么做？", "confidence": 0, "created_at": "2026-06-16 10:31:00"},
+      {"id": 4, "role": "assistant", "content": "第二步需要...", "sources": [...], "confidence": 0.92, "created_at": "2026-06-16 10:31:03"}
+    ]
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| messages | array | 多轮对话消息历史（按时间正序，GetChatDetail 时返回） |
+| messages[].id | int64 | 消息 ID |
+| messages[].role | string | `user` 或 `assistant` |
+| messages[].content | string | 消息正文 |
+| messages[].sources | array | 知识来源（仅 assistant 消息） |
+| messages[].confidence | float64 | 置信度（仅 assistant 消息） |
+| messages[].created_at | string | 消息创建时间 |
 
 ---
 

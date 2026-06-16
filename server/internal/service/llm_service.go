@@ -105,8 +105,9 @@ type SyncChatResult struct {
 
 // SyncChat 执行 RAG 检索 + LLM 同步生成。
 //
+// history 为多轮对话的历史消息（user+assistant），在 RAG 上下文前注入。
 // 用于 POST /api/v1/portal/chat-sessions（非流式 JSON 响应）。
-func (s *LLMService) SyncChat(ctx context.Context, question string, kbID int64, opts rag.RAGOptions) (*SyncChatResult, error) {
+func (s *LLMService) SyncChat(ctx context.Context, question string, kbID int64, opts rag.RAGOptions, history []adapter.ChatMessage) (*SyncChatResult, error) {
 	start := time.Now()
 
 	// Step 1: RAG 管道检索
@@ -127,7 +128,7 @@ func (s *LLMService) SyncChat(ctx context.Context, question string, kbID int64, 
 	// Step 3: LLM 同步生成（仅当 llmClient 可用）
 	var answer string
 	if s.llmClient != nil {
-		messages := s.buildMessages(chunks, question)
+		messages := s.buildMessages(chunks, question, history)
 		model, maxTokens := s.getModelConfig()
 		llmResp, llmErr := s.llmClient.ChatCompletion(ctx, adapter.ChatRequest{
 			Messages:    messages,
@@ -173,10 +174,9 @@ func (s *LLMService) SyncChat(ctx context.Context, question string, kbID int64, 
 
 // StreamChat 执行 RAG 检索 + LLM **流式**生成。
 //
+// history 为多轮对话的历史消息，在 RAG 上下文前注入。
 // 用于 POST /api/v1/portal/chat-sessions/stream（SSE 流式响应）。
-// 返回的事件通道在 LLM 流式结束或出错后由内部 goroutine 关闭。
-// 单次 LLM 调用，用户看到的 token 与最终 done 事件中的 answer 一致。
-func (s *LLMService) StreamChat(ctx context.Context, question string, kbID int64, opts rag.RAGOptions) (<-chan StreamEvent, error) {
+func (s *LLMService) StreamChat(ctx context.Context, question string, kbID int64, opts rag.RAGOptions, history []adapter.ChatMessage) (<-chan StreamEvent, error) {
 	eventCh := make(chan StreamEvent, 100)
 
 	go func() {
@@ -219,7 +219,7 @@ func (s *LLMService) StreamChat(ctx context.Context, question string, kbID int64
 		// 发送 LLM 生成步骤事件
 		sendOrCancel(ctx, eventCh, StreamEvent{Type: "step", ID: "llm_generate", Label: "LLM 生成"})
 
-		messages := s.buildMessages(chunks, question)
+		messages := s.buildMessages(chunks, question, history)
 		model, maxTokens := s.getModelConfig()
 		tokenCh, llmErr := s.llmClient.ChatCompletionStream(ctx, adapter.ChatRequest{
 			Messages:    messages,
@@ -318,21 +318,31 @@ func (s *LLMService) executeRAG(ctx context.Context, question string, kbID int64
 	return nil, nil, nil
 }
 
-// buildMessages 将 RAG chunk 注入系统提示词，构建 LLM 请求消息。
+// buildMessages 将 RAG chunk 和历史对话注入系统提示词，构建 LLM 请求消息。
 //
-// 为什么把 RAG 上下文放在 user 消息而非 system 消息中：
-// 部分模型（如 llama.cpp 旧版本）对过长 system 消息处理不佳，
-// 放在 user 消息中兼容性更好。
-func (s *LLMService) buildMessages(chunks []rag.RetrievalResult, question string) []adapter.ChatMessage {
+// history 为多轮对话历史（按时间正序），插入在 system prompt 与当前 RAG 问题之间，
+// 使 LLM 理解之前的对话上下文。
+func (s *LLMService) buildMessages(chunks []rag.RetrievalResult, question string, history []adapter.ChatMessage) []adapter.ChatMessage {
 	systemPrompt := "你是一个运维知识助手。根据以下知识库内容回答用户问题。如果知识库中没有相关信息，请如实说明。"
 	var ctxBuilder strings.Builder
 	for i, chunk := range chunks {
 		ctxBuilder.WriteString(fmt.Sprintf("【参考资料 %d】%s\n", i+1, chunk.Content))
 	}
-	return []adapter.ChatMessage{
+
+	msgs := []adapter.ChatMessage{
 		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: fmt.Sprintf("知识库内容：\n%s\n\n用户问题：%s", ctxBuilder.String(), question)},
 	}
+
+	// 注入多轮对话历史
+	for _, h := range history {
+		msgs = append(msgs, h)
+	}
+
+	msgs = append(msgs, adapter.ChatMessage{
+		Role: "user", Content: fmt.Sprintf("知识库内容：\n%s\n\n用户问题：%s", ctxBuilder.String(), question),
+	})
+
+	return msgs
 }
 
 // getModelConfig 从 LLMConfigManager 读取当前模型和 maxTokens。

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"opsmind/internal/adapter"
 	"opsmind/internal/dto/request"
 	"opsmind/internal/dto/response"
 	"opsmind/internal/model"
@@ -33,7 +34,9 @@ type chatSessionRepo interface {
 	Create(session *model.ChatSession) error
 	CreateBatch(messages []model.ChatMessage) error
 	FindByID(id int64) (*model.ChatSession, error)
+	FindMessagesBySession(sessionID int64) ([]model.ChatMessage, error)
 	UpdateFeedback(id int64, feedback int16) error
+	UpdateSession(session *model.ChatSession) error
 }
 
 type chatPipeline interface {
@@ -74,15 +77,17 @@ func NewChatService(knowledgeRepo chatKnowledgeRepo, chatRepo chatSessionRepo, p
 
 // CreateChatSession 使用 RAG 管道 + LLM 创建问答会话。
 //
+// 支持多轮对话：req.SessionID > 0 时加载历史消息作为上下文，
+// 并追加新消息到已有会话。
+//
 // 流程：
-//  1. 校验参数
-//  2. LLMService.SyncChat（RAG 检索 + prompt 构建 + LLM 同步生成）
-//  3. 保存会话到 DB
+//  1. 校验参数 + 加载历史（多轮时）
+//  2. LLMService.SyncChat（含历史上下文）
+//  3. 保存/复用会话 + 持久化 user+assistant 消息
 func (s *ChatService) CreateChatSession(req request.CreateChatRequest, userID int64) (*ChatSessionResponse, error) {
 	if strings.TrimSpace(req.Question) == "" {
 		return nil, errcode.AppError{Code: errcode.ErrParam, Message: "问题不能为空"}
 	}
-
 	if s.knowledgeRepo == nil {
 		return nil, errcode.AppError{Code: errcode.ErrAIUnavailable, Message: fallbackAIUnavailable}
 	}
@@ -91,8 +96,24 @@ func (s *ChatService) CreateChatSession(req request.CreateChatRequest, userID in
 		return nil, errcode.AppError{Code: errcode.ErrNotFound, Message: "知识库不存在"}
 	}
 
-	// 构建 RAGOptions（当前使用默认值，后续可从 req.RAGOptions 映射）
-	// TODO(service/chat): req.RAGOptions 被忽略，前端高级设置不会真正影响后端管道。
+	// 多轮对话：加载历史消息
+	var history []adapter.ChatMessage
+	var session *model.ChatSession
+	isMultiTurn := req.SessionID > 0 && s.chatRepo != nil
+	if isMultiTurn {
+		session, err = s.chatRepo.FindByID(req.SessionID)
+		if err != nil {
+			return nil, errcode.AppError{Code: errcode.ErrNotFound, Message: "会话不存在"}
+		}
+		if session.UserID != userID {
+			return nil, errcode.AppError{Code: errcode.ErrForbidden, Message: "无权访问该会话"}
+		}
+		msgs, _ := s.chatRepo.FindMessagesBySession(req.SessionID)
+		for _, m := range msgs {
+			history = append(history, adapter.ChatMessage{Role: m.Role, Content: m.Content})
+		}
+	}
+
 	opts := rag.RAGOptions{
 		TopK:         s.defaultTopK,
 		QueryRewrite: true,
@@ -108,12 +129,12 @@ func (s *ChatService) CreateChatSession(req request.CreateChatRequest, userID in
 	durationMS := 0
 
 	if s.llmService != nil {
-		// TODO(service/chat): 接收 context.Context 参数，避免 context.Background。
+		// TODO(service/chat): 接收 context.Context 参数。
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
 		start := time.Now()
-		result, syncErr := s.llmService.SyncChat(ctx, req.Question, req.KBID, opts)
+		result, syncErr := s.llmService.SyncChat(ctx, req.Question, req.KBID, opts, history)
 		durationMS = int(time.Since(start).Milliseconds())
 		if syncErr != nil {
 			return nil, errcode.AppError{Code: errcode.ErrRAGUnavailable, Message: syncErr.Error()}
@@ -123,34 +144,39 @@ func (s *ChatService) CreateChatSession(req request.CreateChatRequest, userID in
 		confidence = result.Confidence
 		pipeMeta = result.Pipeline
 	} else {
-		// 无 LLMService：降级提示
 		answer = "当前 AI 服务暂不可用，请提交申告由人工处理"
 	}
 
 	canSubmit := len(sources) == 0 || confidence < defaultConfidenceThreshold
 
-	// 保存会话
-	sess := &model.ChatSession{
-		UserID:     userID,
-		KBID:       req.KBID,
-		Question:   req.Question,
-		Answer:     answer,
-		Confidence: confidence,
-		DurationMs: durationMS,
-	}
-	if len(sources) > 0 {
-		if srcJSON, err := json.Marshal(sources); err == nil {
-			sess.Sources = srcJSON
-		}
-	}
+	// 持久化会话（新会话创建，已有会话复用）
 	if s.chatRepo != nil {
-		if err := s.chatRepo.Create(sess); err != nil {
-			return nil, errcode.AppError{Code: errcode.ErrUnknown, Message: "保存会话失败"}
+		if !isMultiTurn {
+			session = &model.ChatSession{
+				UserID: userID, KBID: req.KBID, Question: req.Question,
+				Answer: answer, Confidence: confidence, DurationMs: durationMS,
+			}
+			if len(sources) > 0 {
+				if srcJSON, _ := json.Marshal(sources); len(srcJSON) > 0 {
+					session.Sources = srcJSON
+				}
+			}
+			if err := s.chatRepo.Create(session); err != nil {
+				return nil, errcode.AppError{Code: errcode.ErrUnknown, Message: "保存会话失败"}
+			}
 		}
+
+		// 持久化消息（user + assistant）
+		srcJSON, _ := json.Marshal(sources)
+		_ = s.chatRepo.CreateBatch([]model.ChatMessage{
+			{Role: "user", Content: req.Question, SessionID: session.ID},
+			{Role: "assistant", Content: answer, SessionID: session.ID,
+				Sources: srcJSON, Confidence: confidence},
+		})
 	}
 
 	return &ChatSessionResponse{
-		SessionID:       sess.ID,
+		SessionID:       session.ID,
 		Question:        req.Question,
 		Answer:          answer,
 		Sources:         sources,
@@ -182,10 +208,9 @@ func (s *ChatService) SubmitFeedback(sessionID int64, feedback int16) error {
 // GetChatDetail
 // =============================================================================
 
-// GetChatDetail 查询问答会话详情。
+// GetChatDetail 查询问答会话详情（含多轮对话消息历史）。
 func (s *ChatService) GetChatDetail(sessionID int64) (*response.ChatSessionResponse, error) {
-	// TODO(service/chat): GetChatDetail 未校验 session.UserID，门户端用户可查询他人的会话 ID。
-	// 应接收 currentUserID 或拆分 Admin/Portal 查询接口。
+	// TODO(service/chat): 应接收 currentUserID 校验会话归属。
 	if s.chatRepo == nil {
 		return nil, errcode.AppError{Code: errcode.ErrUnknown, Message: "服务未初始化"}
 	}
@@ -199,6 +224,25 @@ func (s *ChatService) GetChatDetail(sessionID int64) (*response.ChatSessionRespo
 		json.Unmarshal(session.Sources, &sources)
 	}
 
+	// 加载消息历史
+	var messages []response.MessageItem
+	if msgs, msgErr := s.chatRepo.FindMessagesBySession(sessionID); msgErr == nil {
+		for _, m := range msgs {
+			var msgSources []response.SourceItem
+			if len(m.Sources) > 0 {
+				json.Unmarshal(m.Sources, &msgSources)
+			}
+			messages = append(messages, response.MessageItem{
+				ID:         m.ID,
+				Role:       m.Role,
+				Content:    m.Content,
+				Sources:    msgSources,
+				Confidence: m.Confidence,
+				CreatedAt:  m.CreatedAt.Format("2006-01-02 15:04:05"),
+			})
+		}
+	}
+
 	return &response.ChatSessionResponse{
 		SessionID:       session.ID,
 		Question:        session.Question,
@@ -209,6 +253,7 @@ func (s *ChatService) GetChatDetail(sessionID int64) (*response.ChatSessionRespo
 		DurationMS:      session.DurationMs,
 		Feedback:        session.Feedback,
 		CreatedAt:       session.CreatedAt.Format("2006-01-02 15:04:05"),
+		Messages:        messages,
 	}, nil
 }
 
@@ -216,13 +261,9 @@ func (s *ChatService) GetChatDetail(sessionID int64) (*response.ChatSessionRespo
 // StreamChat — SSE 流式问答
 // =============================================================================
 
-// StreamChat 创建问答会话并以流式事件通道返回。
+// StreamChat 创建/追加问答会话并以流式事件通道返回。
 //
-// 流程：
-//  1. 校验参数
-//  2. LLMService.StreamChat 获取事件通道
-//  3. goroutine 代理事件，done 时创建 session 填入 session_id
-//
+// 支持多轮：req.SessionID > 0 时加载历史注入上下文，追加消息到已有会话。
 // 单次 LLM 调用：用户看到的 token 与最终存入 DB 的答案完全一致。
 func (s *ChatService) StreamChat(ctx context.Context, req request.CreateChatRequest, userID int64) (<-chan StreamEvent, error) {
 	if strings.TrimSpace(req.Question) == "" {
@@ -234,6 +275,24 @@ func (s *ChatService) StreamChat(ctx context.Context, req request.CreateChatRequ
 	_, err := s.knowledgeRepo.FindKBByID(req.KBID)
 	if err != nil {
 		return nil, errcode.AppError{Code: errcode.ErrNotFound, Message: "知识库不存在"}
+	}
+
+	// 多轮对话：加载历史消息
+	var history []adapter.ChatMessage
+	var session *model.ChatSession
+	isMultiTurn := req.SessionID > 0 && s.chatRepo != nil
+	if isMultiTurn {
+		session, err = s.chatRepo.FindByID(req.SessionID)
+		if err != nil {
+			return nil, errcode.AppError{Code: errcode.ErrNotFound, Message: "会话不存在"}
+		}
+		if session.UserID != userID {
+			return nil, errcode.AppError{Code: errcode.ErrForbidden, Message: "无权访问该会话"}
+		}
+		msgs, _ := s.chatRepo.FindMessagesBySession(req.SessionID)
+		for _, m := range msgs {
+			history = append(history, adapter.ChatMessage{Role: m.Role, Content: m.Content})
+		}
 	}
 
 	opts := rag.RAGOptions{
@@ -248,13 +307,16 @@ func (s *ChatService) StreamChat(ctx context.Context, req request.CreateChatRequ
 		return nil, errcode.AppError{Code: errcode.ErrAIUnavailable, Message: fallbackAIUnavailable}
 	}
 
-	llmEvents, err := s.llmService.StreamChat(ctx, req.Question, req.KBID, opts)
+	llmEvents, err := s.llmService.StreamChat(ctx, req.Question, req.KBID, opts, history)
 	if err != nil {
 		return nil, errcode.AppError{Code: errcode.ErrRAGUnavailable, Message: err.Error()}
 	}
 
-	// 代理事件通道，done 时持久化 session
+	// 代理事件通道，done 时持久化 session + messages
 	outCh := make(chan StreamEvent, 100)
+
+	// 闭包捕获 isMultiTurn / sessionID
+	sessionID := req.SessionID
 	go func() {
 		defer close(outCh)
 		for evt := range llmEvents {
@@ -263,24 +325,38 @@ func (s *ChatService) StreamChat(ctx context.Context, req request.CreateChatRequ
 				return
 			default:
 			}
-			// done 事件到达：创建 session 并回填 session_id
 			if evt.Type == "done" && evt.Metadata != nil && s.chatRepo != nil {
 				srcJSON, _ := json.Marshal(evt.Metadata.Sources)
-				sess := &model.ChatSession{
-					UserID:     userID,
-					KBID:       req.KBID,
-					Question:   req.Question,
-					Answer:     evt.Metadata.Answer,
-					Sources:    srcJSON,
-					Confidence: evt.Metadata.Confidence,
-					DurationMs: evt.Metadata.DurationMS,
+				if !isMultiTurn {
+					// 新会话：创建
+					sess := &model.ChatSession{
+						UserID: userID, KBID: req.KBID, Question: req.Question,
+						Answer: evt.Metadata.Answer, Sources: srcJSON,
+						Confidence: evt.Metadata.Confidence, DurationMs: evt.Metadata.DurationMS,
+					}
+					if err := s.chatRepo.Create(sess); err == nil {
+						sessionID = sess.ID
+					}
+				} else {
+					// 已有会话：更新 answer
+					s.chatRepo.UpdateSession(&model.ChatSession{
+						ID: sessionID, Answer: evt.Metadata.Answer,
+						Sources: srcJSON, Confidence: evt.Metadata.Confidence,
+						DurationMs: evt.Metadata.DurationMS,
+					})
 				}
-				if err := s.chatRepo.Create(sess); err == nil {
-					evt.Metadata.SessionID = sess.ID
-					evt.Metadata.Question = req.Question
-					evt.Metadata.Feedback = 0
-					evt.Metadata.CreatedAt = time.Now().Format("2006-01-02 15:04:05")
-				}
+
+				// 持久化消息
+				_ = s.chatRepo.CreateBatch([]model.ChatMessage{
+					{Role: "user", Content: req.Question, SessionID: sessionID},
+					{Role: "assistant", Content: evt.Metadata.Answer, SessionID: sessionID,
+						Sources: srcJSON, Confidence: evt.Metadata.Confidence},
+				})
+
+				evt.Metadata.SessionID = sessionID
+				evt.Metadata.Question = req.Question
+				evt.Metadata.Feedback = 0
+				evt.Metadata.CreatedAt = time.Now().Format("2006-01-02 15:04:05")
 			}
 			if ok := sendOrCancel(ctx, outCh, evt); !ok {
 				return

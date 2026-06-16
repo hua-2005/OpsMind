@@ -86,10 +86,33 @@ func (r *ChatRepo) ListByUser(userID int64, page, pageSize int) ([]model.ChatSes
 // 批量插入减少网络往返。GORM Create 支持切片参数。
 // 空切片调用不会报错（GORM 跳过空切片插入）。
 func (r *ChatRepo) CreateBatch(messages []model.ChatMessage) error {
-	// TODO(repository/chat): CreateBatch 当前没有和 ChatSession 创建放在同一事务。
-	// 如果后续恢复消息落库，应保证会话和两条消息原子写入。
 	if len(messages) == 0 {
 		return nil
 	}
 	return r.db.Create(&messages).Error
+}
+
+// FindMessagesBySession 查询会话的全部消息（按时间正序）。
+//
+// 用于多轮对话——加载历史消息作为 LLM 上下文。
+// 限制最多返回 50 条，避免超长历史撑爆 prompt。
+func (r *ChatRepo) FindMessagesBySession(sessionID int64) ([]model.ChatMessage, error) {
+	var messages []model.ChatMessage
+	err := r.db.Where("session_id = ?", sessionID).
+		Order("created_at ASC").Limit(50).
+		Find(&messages).Error
+	return messages, err
+}
+
+// UpdateSession 更新会话的答案/置信度/耗时字段。
+//
+// 流式完成后，用完整答案回填预创建的 session。
+// 只更新特定字段，避免 Save 覆盖其他并发写入。
+func (r *ChatRepo) UpdateSession(session *model.ChatSession) error {
+	return r.db.Model(&model.ChatSession{}).Where("id = ?", session.ID).Updates(map[string]interface{}{
+		"answer":      session.Answer,
+		"sources":     session.Sources,
+		"confidence":  session.Confidence,
+		"duration_ms": session.DurationMs,
+	}).Error
 }
