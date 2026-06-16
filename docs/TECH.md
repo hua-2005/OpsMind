@@ -56,7 +56,7 @@ OpsMind 采用**单体分层架构（Modular Monolith）**，按 Handler → Ser
 |------|------|
 | `pipeline.go` | 管道编排器，串联全部步骤 |
 | `query_rewrite.go` | LLM 查询改写（消除指代歧义） |
-| `multi_route.go` | LLM 多路检索（生成子查询并行执行） |
+| `multi_route.go` | LLM 多路检索（JSON 数组输出，count 钳位 [2,4]） |
 | `hybrid.go` | RRF 融合（向量 + BM25） |
 | `bm25.go` | Okapi BM25 算法（gse 中文分词） |
 | `rerank.go` | cross-encoder 重排序（adapter.Reranker 接口） |

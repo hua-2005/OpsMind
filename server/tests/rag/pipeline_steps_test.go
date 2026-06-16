@@ -101,7 +101,7 @@ func TestQueryRewrite_WithHistory(t *testing.T) {
 func TestMultiRoute_Success(t *testing.T) {
 	llm := &mockLLMClient{
 		chatResponse: &adapter.ChatResponse{
-			Content: "1. VPN连接故障排查\n2. VPN客户端配置\n3. VPN证书问题",
+			Content: `["VPN连接故障排查", "VPN客户端配置", "VPN证书问题"]`,
 			FinishReason: "stop",
 		},
 	}

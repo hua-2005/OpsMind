@@ -72,8 +72,8 @@
 - ✅ [rag/pipeline.go](/server/internal/rag/pipeline.go) — ~~重排序候选过多时应提前截断：Rerank 在重排**前**未按 `RerankCount` 截断候选列表；事后检查（第 207 行）为时已晚~~ — Rerank 前按 RerankCount 截断候选池；RerankCount < TopK 校验已前置至 Normalize()
 - ✅ [rag/pipeline.go](/server/internal/rag/pipeline.go) — ~~Execute 缺少入口 opts 规范化：TopK=0 → LIMIT 0，RouteCount=0 → 多路检索跳过，与「零值使用默认」注释不一致~~ — RAGOptions.Normalize() 在 Execute 入口自动填充零值默认值
 - 🟡 [rag/query_rewrite.go](/server/internal/rag/query_rewrite.go) — llm 为 nil 时应降级返回原 query，而非 panic
-- 🟡 [rag/multi_route.go](/server/internal/rag/multi_route.go) — LLM 输出子查询的清洗逻辑脆弱（`TrimLeft` 依赖特定前缀格式）
-- 🟡⭐ [rag/multi_route.go](/server/internal/rag/multi_route.go) — k（子查询数量）无上限，k=100 可致百倍检索放大
+- ✅ [rag/multi_route.go](/server/internal/rag/multi_route.go) — ~~LLM 输出子查询的清洗逻辑脆弱（`TrimLeft` 依赖特定前缀格式）~~ — 改为 JSON 数组解析，容错 markdown 包裹
+- ✅ [rag/multi_route.go](/server/internal/rag/multi_route.go) — ~~k（子查询数量）无上限~~ — 钳位到 [2, 4]
 - 🟡 [rag/hybrid.go](/server/internal/rag/hybrid.go) — 单路结果直接返回时未按 topK 截断
 - 🟡 [rag/types.go](/server/internal/rag/types.go) — RAGOptions 使用裸 `bool`，零值问题致空 JSON `{}` 全部禁用，与文档默认「全部启用」矛盾
 - 🟡 [rag/types.go](/server/internal/rag/types.go) — `RetrievalResult.Score` 文档注释称「归一化到 [0,1]」，但 BM25 分数无边界，RRF 融合后可 >1。注释与实现不一致。
@@ -547,4 +547,4 @@
 19. 上传 API 字段名与文档不一致（文档 `files` vs 代码 `file`）
 
 ---
-**最后更新**：2026-06-16（rerank 模块重构完成：LLM prompt → cross-encoder 子进程；pipeline.go 6 项 TODO 已修复）
+**最后更新**：2026-06-16（multi_route.go 2 项 TODO 修复：JSON 解析 + count 钳位；query_rewrite.go llm nil 守卫）
