@@ -78,7 +78,12 @@
 
         <div class="form-group">
           <label class="form-label">API Key{{ form.provider_type === 1 ? '（llama.cpp 可留空）' : '' }}</label>
-          <input v-model="form.api_key" class="form-input" placeholder="sk-..." />
+          <input 
+            v-model="form.api_key" 
+            class="form-input" 
+            :placeholder="editingId ? '留空则保持原值不变' : 'sk-...'" 
+            @input="apiKeyChanged = true"
+          />
         </div>
 
         <div class="form-row">
@@ -183,6 +188,7 @@ const testing = ref(false)
 const editingId = ref<number | null>(null)
 const deleteTarget = ref<LLMConfigItem | null>(null)
 const testResult = ref<{ success: boolean; model?: string; latency_ms?: number } | null>(null)
+const apiKeyChanged = ref(false)  // 标记用户是否修改了 API Key
 const toast = useToast()
 
 const form = reactive({
@@ -228,6 +234,7 @@ function resetForm() {
   form.max_tokens = 8192
   form.vector_dimension = 1024
   form.is_default = false
+  apiKeyChanged.value = false
 }
 
 function startCreate() {
@@ -248,6 +255,7 @@ function startEdit(cfg: LLMConfigItem) {
   form.max_tokens = cfg.max_tokens
   form.vector_dimension = cfg.vector_dimension
   form.is_default = cfg.is_default
+  apiKeyChanged.value = false
   showModal.value = true
 }
 
@@ -271,17 +279,20 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    const body = {
+    const body: any = {
       name: form.name,
       provider_type: form.provider_type,
       base_url: form.base_url,
       embedding_base_url: form.embedding_base_url || '',
-      api_key: form.api_key,
       llm_model: form.llm_model,
       embedding_model: form.embedding_model,
       max_tokens: form.max_tokens,
       vector_dimension: form.vector_dimension,
       is_default: form.is_default,
+    }
+    // 只在新建或用户明确修改时才发送 API Key
+    if (!editingId.value || apiKeyChanged.value) {
+      body.api_key = form.api_key
     }
     if (editingId.value) {
       await updateLLMConfig(editingId.value, body)

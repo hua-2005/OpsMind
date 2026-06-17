@@ -470,6 +470,7 @@
 - ✅ [stores/chat.ts](/web/src/stores/chat.ts) — 反馈提交错误仅 `console.error`，用户点击「已解决/未解决」后静默失败。修复：添加 `feedbackError` 和 `submittingFeedback` 状态，在 store 中正确处理错误反馈。
 - ✅ [views/portal/TicketSubmit.vue](/web/src/views/portal/TicketSubmit.vue) — `chat_context` 来自 URL query 参数直接传入 API，无校验（JSON 注入风险）。修复：添加解析和验证逻辑，只保留允许的字段，防止注入任意数据。
 - ✅ [views/admin/ModelConfig.vue](/web/src/views/admin/ModelConfig.vue) + [views/admin/SystemConfig.vue](/web/src/views/admin/SystemConfig.vue) — **重复配置管理**：两页面独立管理 `ai.default_top_k` 和 `ai.confidence_threshold`，修改互不可见，最后写入胜出。修复：创建 `useAIConfig` composable 提供统一的响应式状态管理，两个页面共享同一份数据源，修改会自动同步。
+- ✅ [views/admin/LLMConfig.vue](/web/src/views/admin/LLMConfig.vue) — 每次编辑必须重新输入 API Key（后端返回脱敏值，前端清空表单）。修复：添加 `apiKeyChanged` 标志位，编辑时留空不发送 API Key 字段，后端保持原值，用户输入新值才更新。
 
 ### 新发现 P0 项（2026-06-16）
 
@@ -481,8 +482,6 @@
 - 🟡⭐ [stores/auth.ts](/web/src/stores/auth.ts) — **循环依赖风险**：`api/auth.ts` 从 `@/stores/auth` 导入类型，若 store 未来从 API 导入则形成循环
 
 ### 配置管理
-
-- 🟡 [views/admin/LLMConfig.vue](/web/src/views/admin/LLMConfig.vue) — 每次编辑必须重新输入 API Key（后端返回脱敏值，前端清空表单）
 
 ### 组件拆分与重复代码
 
