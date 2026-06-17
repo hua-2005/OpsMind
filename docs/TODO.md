@@ -469,6 +469,7 @@
 - ✅ [views/admin/LLMConfig.vue](/web/src/views/admin/LLMConfig.vue) — **创建配置时测试连接崩溃**：`handleTestConnection` 调 `updateLLMConfig(editingId.value!)`，新建时 `editingId` 为 null，`!` 断言导致运行时崩溃。修复：重构 `doSave()` 函数，接受显式 targetId 参数，避免使用不安全的非空断言。
 - ✅ [stores/chat.ts](/web/src/stores/chat.ts) — 反馈提交错误仅 `console.error`，用户点击「已解决/未解决」后静默失败。修复：添加 `feedbackError` 和 `submittingFeedback` 状态，在 store 中正确处理错误反馈。
 - ✅ [views/portal/TicketSubmit.vue](/web/src/views/portal/TicketSubmit.vue) — `chat_context` 来自 URL query 参数直接传入 API，无校验（JSON 注入风险）。修复：添加解析和验证逻辑，只保留允许的字段，防止注入任意数据。
+- ✅ [views/admin/ModelConfig.vue](/web/src/views/admin/ModelConfig.vue) + [views/admin/SystemConfig.vue](/web/src/views/admin/SystemConfig.vue) — **重复配置管理**：两页面独立管理 `ai.default_top_k` 和 `ai.confidence_threshold`，修改互不可见，最后写入胜出。修复：创建 `useAIConfig` composable 提供统一的响应式状态管理，两个页面共享同一份数据源，修改会自动同步。
 
 ### 新发现 P0 项（2026-06-16）
 
@@ -482,7 +483,6 @@
 ### 配置管理
 
 - 🟡 [views/admin/LLMConfig.vue](/web/src/views/admin/LLMConfig.vue) — 每次编辑必须重新输入 API Key（后端返回脱敏值，前端清空表单）
-- 🟡⭐ [views/admin/ModelConfig.vue](/web/src/views/admin/ModelConfig.vue) + [views/admin/SystemConfig.vue](/web/src/views/admin/SystemConfig.vue) — **重复配置管理**：两页面独立管理 `ai.default_top_k` 和 `ai.confidence_threshold`，修改互不可见，最后写入胜出。📝 [PRD.md §3.1](PRD.md) 记载这两个参数应为统一 AI 配置，而非分散在两个独立页面。
 
 ### 组件拆分与重复代码
 
