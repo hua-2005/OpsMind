@@ -1,0 +1,5 @@
+#!/bin/sh
+# Pre-commit checks
+echo "🔍 Running pre-commit checks..."
+# 在这里可以添加 lint、格式化等检查
+exit 0

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Auto commit after merge
+echo "🔄 Post-merge hook triggered"
+git add -A
+git commit -m "chore: auto commit after merge" 2>/dev/null || true
