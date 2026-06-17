@@ -466,12 +466,11 @@
 - ✅ [stores/chat.ts](/web/src/stores/chat.ts) — `crypto.randomUUID()` 无 fallback：HTTP/localhost 环境下 `crypto.randomUUID()` 为 undefined，调用直接抛 TypeError 崩溃整个聊天功能。修复：创建 `utils/id.ts` 并使用 `generateId()` 替代，该函数有完整的 base64url 和 crypto 回退支持。
 - ✅ [views/admin/TicketDetail.vue](/web/src/views/admin/TicketDetail.vue) — 操作按钮缺 loading 守卫：`doAction()` 和 `doAddRecord()` 未绑定 `:disabled` 到 `<template>` 按钮，用户可多次点击发送重复请求。修复：为所有操作按钮绑定 `:disabled="saving"` 并显示 loading 文字。
 - ✅ [App.vue](/web/src/App.vue) — `NMessageProvider` 死代码：全项目无组件使用 Naive UI `useMessage()`（统一使用自定义 `useToast()`），每次渲染浪费不必要的组件树开销。修复：移除 `<n-message-provider>` 包装组件及相关导入。
+- ✅ [views/admin/LLMConfig.vue](/web/src/views/admin/LLMConfig.vue) — **创建配置时测试连接崩溃**：`handleTestConnection` 调 `updateLLMConfig(editingId.value!)`，新建时 `editingId` 为 null，`!` 断言导致运行时崩溃。修复：重构 `doSave()` 函数，接受显式 targetId 参数，避免使用不安全的非空断言。
 
 ### 新发现 P0 项（2026-06-16）
 
 ### 前置组件 P0（已有 TODO）
-
-- 🔴⭐ [views/admin/LLMConfig.vue](/web/src/views/admin/LLMConfig.vue) — **创建配置时测试连接崩溃**：`handleTestConnection` 调 `updateLLMConfig(editingId.value!)`，新建时 `editingId` 为 null，`!` 断言导致运行时崩溃
 
 ### 数据流与类型安全
 

@@ -301,7 +301,7 @@ async function handleSubmit() {
 async function handleTestConnection(cfg: LLMConfigItem) {
   // 如果正在编辑该配置且表单有改动，先保存再测试
   if (editingId.value && editingId.value === cfg.id) {
-    await doSave()
+    await doSave(cfg.id)
   }
   showTestResult.value = true
   testing.value = true
@@ -318,7 +318,7 @@ async function handleTestConnection(cfg: LLMConfigItem) {
 }
 
 // 保存表单但不关闭对话框（供测试前自动保存使用）
-async function doSave() {
+async function doSave(targetId: number) {
   if (!form.name || !form.base_url || !form.llm_model || !form.embedding_model) return
   const body = {
     name: form.name, provider_type: form.provider_type, base_url: form.base_url,
@@ -327,9 +327,8 @@ async function doSave() {
     max_tokens: form.max_tokens, vector_dimension: form.vector_dimension, is_default: form.is_default,
   }
   try {
-    // TODO(admin/LLMConfig): 新建配置时 editingId 为 null，! 断言会导致 updateLLMConfig(null, body)
-    // 请求错误的 URL 路径。应先判断 editingMode 决定调用 createLLMConfig 还是 updateLLMConfig。
-    await updateLLMConfig(editingId.value!, body)
+    // 直接用 targetId 更新，这是已存在的配置
+    await updateLLMConfig(targetId, body)
   } catch { /* 静默保存，测试连接时会报告具体错误 */ }
 }
 
