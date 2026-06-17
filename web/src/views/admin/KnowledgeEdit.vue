@@ -216,7 +216,10 @@ const fetchArticle = async () => {
 
 const addTag = () => { const t = tagInput.value.trim(); if (t && !form.value.tags.includes(t)) form.value.tags.push(t); tagInput.value = '' }
 const removeTag = (i: number) => { form.value.tags.splice(i, 1) }
-const goBack = () => { router.back() }
+const goBack = () => {
+  // 优先使用路由跳转，避免直接访问页面时离开应用
+  router.push({ name: 'AdminKnowledge' })
+}
 
 const handleSave = async () => {
   if (!form.value.title || !form.value.content) { alert('标题和内容不能为空'); return }

@@ -16,11 +16,13 @@ const props = withDefaults(defineProps<{ status: number; type?: 'user' | 'ticket
 const TEXT_MAP: Record<string, Record<number, string>> = {
   user: { 1: '正常', 2: '已冻结' },
   ticket: { 1: '待处理', 2: '处理中', 3: '需补充信息', 4: '已解决', 5: '已关闭' },
+  knowledge: { 1: '草稿', 2: '待审核', 3: '已通过', 4: '已发布', 5: '已停用', 6: '已驳回' },
 }
 // Naive UI Tag type 映射
 const TYPE_MAP: Record<string, Record<number, 'success' | 'error' | 'warning' | 'info' | 'default'>> = {
   user: { 1: 'success', 2: 'error' },
   ticket: { 1: 'warning', 2: 'info', 3: 'warning', 4: 'success', 5: 'default' },
+  knowledge: { 1: 'default', 2: 'warning', 3: 'info', 4: 'success', 5: 'error', 6: 'error' },
 }
 
 const statusText = computed(() => TEXT_MAP[props.type]?.[props.status] || '未知')

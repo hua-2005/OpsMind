@@ -471,6 +471,9 @@
 - ✅ [views/portal/TicketSubmit.vue](/web/src/views/portal/TicketSubmit.vue) — `chat_context` 来自 URL query 参数直接传入 API，无校验（JSON 注入风险）。修复：添加解析和验证逻辑，只保留允许的字段，防止注入任意数据。
 - ✅ [views/admin/ModelConfig.vue](/web/src/views/admin/ModelConfig.vue) + [views/admin/SystemConfig.vue](/web/src/views/admin/SystemConfig.vue) — **重复配置管理**：两页面独立管理 `ai.default_top_k` 和 `ai.confidence_threshold`，修改互不可见，最后写入胜出。修复：创建 `useAIConfig` composable 提供统一的响应式状态管理，两个页面共享同一份数据源，修改会自动同步。
 - ✅ [views/admin/LLMConfig.vue](/web/src/views/admin/LLMConfig.vue) — 每次编辑必须重新输入 API Key（后端返回脱敏值，前端清空表单）。修复：添加 `apiKeyChanged` 标志位，编辑时留空不发送 API Key 字段，后端保持原值，用户输入新值才更新。
+- ✅ ⭐ **重复 `formatDate`**：[utils/date.ts](/web/src/utils/date.ts)、[utils/format.ts](/web/src/utils/format.ts)、Messages.vue、Dashboard.vue 各有一份独立实现。`utils/format.ts` 全文件为 `utils/date.ts` 的完整副本且零调用方——应删除。修复：删除 `utils/format.ts`。
+- ✅ [components/common/StatusBadge.vue](/web/src/components/common/StatusBadge.vue) — `knowledge` 类型未实现：TEXT_MAP 和 TYPE_MAP 中缺少 knowledge 键，知识文章状态渲染为「未知」。修复：添加 knowledge 类型状态映射（草稿/待审核/已通过/已发布/已停用/已驳回）。
+- ✅ [views/admin/KnowledgeEdit.vue](/web/src/views/admin/KnowledgeEdit.vue) — `router.back()` 在直接访问页面时可能离开应用。修复：使用明确的 `router.push({ name: 'AdminKnowledge' })` 跳转到列表页。
 
 ### 新发现 P0 项（2026-06-16）
 
@@ -488,9 +491,6 @@
 - 🟡 [views/portal/Chat.vue](/web/src/views/portal/Chat.vue) — 组件 >560 行，应拆分为 ChatInput/ChatMessage/ChatPipeline 子组件
 - 🟡 [views/admin/LLMConfig.vue](/web/src/views/admin/LLMConfig.vue) — 组件 >610 行，应拆分
 - 🟡 [views/admin/KnowledgeEdit.vue](/web/src/views/admin/KnowledgeEdit.vue) — 组件 >400 行，多文件上传只显示单个汇总结果
-- 🟡⭐ **重复 `formatDate`**：[utils/date.ts](/web/src/utils/date.ts)、[utils/format.ts](/web/src/utils/format.ts)、Messages.vue、Dashboard.vue 各有一份独立实现。`utils/format.ts` 全文件为 `utils/date.ts` 的完整副本且零调用方——应删除。
-- 🟡 [views/admin/KnowledgeEdit.vue](/web/src/views/admin/KnowledgeEdit.vue) — `router.back()` 在直接访问页面时可能离开应用
-- 🟡 [components/common/StatusBadge.vue](/web/src/components/common/StatusBadge.vue) — `knowledge` 类型未实现：TEXT_MAP 和 TYPE_MAP 中缺少 knowledge 键，知识文章状态渲染为「未知」
 
 ### 新发现 P1 项（2026-06-16）
 
