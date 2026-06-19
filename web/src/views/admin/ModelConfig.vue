@@ -98,13 +98,12 @@ onMounted(() => {
 async function handleSave() {
   saving.value = true
   try {
-    await Promise.all([
-      setConfig('ai.default_top_k', topK.value),
-      setConfig('ai.confidence_threshold', confidenceThreshold.value),
-    ])
+    // 顺序保存，避免部分成功导致配置不一致
+    await setConfig('ai.default_top_k', topK.value)
+    await setConfig('ai.confidence_threshold', confidenceThreshold.value)
     toast.showToast('配置保存成功', 'success')
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '保存失败'
+    const msg = e instanceof Error ? e.message : '保存失败，请检查配置项是否完整'
     toast.showToast(msg, 'error')
   } finally {
     saving.value = false

@@ -48,10 +48,12 @@ func (m *LLMConfigManager) GetConfig() *model.LlmConfig {
 }
 
 // store 原子替换当前配置。
+//
+// 先深拷贝 cfg 再存储，避免调用方后续修改同一指针导致热配置被意外改变。
+// atomic.Value 只保证指针替换原子，不保证指向对象不可变。
 func (m *LLMConfigManager) store(cfg *model.LlmConfig) {
-	// TODO(service/llm_config): store 前应复制 cfg，避免调用方后续修改同一指针导致热配置被意外改变。
-	// atomic.Value 只保证指针替换原子，不保证指向对象不可变。
-	m.current.Store(cfg)
+	copied := *cfg
+	m.current.Store(&copied)
 }
 
 // =============================================================================
@@ -70,6 +72,9 @@ type llmConfigRepo interface {
 	Update(cfg *model.LlmConfig) error
 	Delete(id int64) error
 	ClearDefault() error
+	// WithTx 返回使用指定事务 DB 的新仓库实例。
+	// 确保事务内的多个操作共享同一数据库会话。
+	WithTx(tx *gorm.DB) llmConfigRepo
 }
 
 // =============================================================================
@@ -149,12 +154,11 @@ func (s *LLMConfigService) CreateConfig(name string, providerType int16, baseURL
 	// ClearDefault + Create 包裹在事务中，保证默认配置唯一性约束不被破坏
 	if s.db != nil && isDefault {
 		err := s.db.Transaction(func(tx *gorm.DB) error {
-			// TODO(service/llm_config): 事务内仍调用 s.repo，真实 repo 持有的是原始 db 而不是 tx。
-			// ClearDefault/Create 可能没有进入同一个事务，应创建 txRepo 或让 repo 方法接收 tx。
-			if err := s.repo.ClearDefault(); err != nil {
+			txRepo := s.repo.WithTx(tx)
+			if err := txRepo.ClearDefault(); err != nil {
 				return AppError{Code: errcode.ErrUnknown, Message: "清空默认配置失败"}
 			}
-			return s.repo.Create(cfg)
+			return txRepo.Create(cfg)
 		})
 		if err != nil {
 			return nil, err
@@ -189,10 +193,11 @@ func (s *LLMConfigService) UpdateConfig(cfg *model.LlmConfig) error {
 	// ClearDefault + Update 包裹在事务中
 	if s.db != nil && cfg.IsDefault {
 		err := s.db.Transaction(func(tx *gorm.DB) error {
-			if err := s.repo.ClearDefault(); err != nil {
+			txRepo := s.repo.WithTx(tx)
+			if err := txRepo.ClearDefault(); err != nil {
 				return AppError{Code: errcode.ErrUnknown, Message: "清空默认配置失败"}
 			}
-			return s.repo.Update(cfg)
+			return txRepo.Update(cfg)
 		})
 		if err != nil {
 			return err

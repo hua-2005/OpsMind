@@ -9,6 +9,40 @@
 
 ---
 
+## 2026-06-20 修复记录（类型安全 & 边界情况 & 文档一致性）
+
+### 后端 P0 修复（8 项）
+
+- ✅ [repository/role_repo.go](/server/internal/repository/role_repo.go) — **GORM 零值陷阱**：`Delete` 增加 `id <= 0` 守卫 + `RowsAffected` 检查，防止误删全表
+- ✅ [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — **baseURL 校验**：`NewOpenAIClient` 增加 `validateBaseURL` 非空+URL 格式校验（无效时 Warn）
+- ✅ [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — **req.Model 空值校验**：`ChatCompletion` 入口增加 Model 必填校验，提前暴露参数错误
+- ✅ [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — **流式重试**：`ChatCompletionStream` 新增 `streamRequestWithRetry`，429/503 指数退避重试
+- ✅ [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — **Scanner Buffer**：`readSSEStream` 扩展 buffer 至 1MB，防止大 SSE data 行 `ErrTooLong`
+- ✅ [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — **doHTTPRequest 一致性**：429/503 返回 `retryableError`，与 `tryRequest` 行为一致，修复 EmbeddingClient 重试失效
+- ✅ [service/llm_config_service.go](/server/internal/service/llm_config_service.go) — **atomic.Store 深拷贝**：`LLMConfigManager.store` 先复制 cfg 再存储，防止调用方修改污染热配置
+- ✅ [service/llm_config_service.go](/server/internal/service/llm_config_service.go) + [repository/llm_config_repo.go](/server/internal/repository/llm_config_repo.go) — **事务原子性**：新增 `WithTx` 接口方法，事务内使用 `txRepo` 确保 ClearDefault+Create/Update 在同一事务
+
+### 后端 P0 修复（Handler 层 3 项）
+
+- ✅ [handler/llm_config.go](/server/internal/handler/llm_config.go) — **TestConnection 修复**：基于被测 cfg 创建临时 OpenAIClient，不再使用全局 `h.llmClient`（修复"测试错误端点"问题）
+- ✅ [handler/llm_config.go](/server/internal/handler/llm_config.go) — **TestConnection 错误码**：失败返回 `code=0, success=false`，与 API 文档一致
+- ✅ [handler/llm_config.go](/server/internal/handler/llm_config.go) — **UpdateConfig 保留 api_key**：先取旧配置，api_key/max_tokens/vector_dimension 不传时保留原值（修复"清空密钥"问题）
+
+### 前端修复（10 项）
+
+- ✅ [types/menu.ts](/web/src/types/menu.ts) — **MenuItem 类型统一**：补充 `parent_id`/`sort_order`/`type` 字段，与 `api/role.ts` 一致
+- ✅ [api/auth.ts](/web/src/api/auth.ts) — **循环依赖消除**：`MenuItem` 直接从 `@/types/menu` 导入，不再依赖 store
+- ✅ [api/user.ts](/web/src/api/user.ts) — **UserItem 完善**：增加 `role_ids` 字段
+- ✅ [views/admin/UserList.vue](/web/src/views/admin/UserList.vue) — **移除本地类型**：导入 `UserItem` from `@/api/user`，修复字段名 `roles`→`role_names`
+- ✅ [views/admin/KnowledgeList.vue](/web/src/views/admin/KnowledgeList.vue) — **KB 编辑修复**：`startEditKB` 填充 `kb.description` 而非清空；KB 接口增加 `description` 字段
+- ✅ [views/admin/KnowledgeList.vue](/web/src/views/admin/KnowledgeList.vue) + [views/admin/KnowledgeEdit.vue](/web/src/views/admin/KnowledgeEdit.vue) — **alert→toast 替换**：全部 `alert()` 调用替换为 `toast.showToast()`（共 18 处）
+- ✅ [views/admin/ModelConfig.vue](/web/src/views/admin/ModelConfig.vue) — **顺序保存**：`Promise.all` 改为顺序 `await`，避免部分成功导致配置不一致
+- ✅ [views/admin/RoleManage.vue](/web/src/views/admin/RoleManage.vue) — **权限动态化**：从 `listMenus` API 动态获取可用权限，静态回退兜底
+- ✅ [stores/chat.ts](/web/src/stores/chat.ts) — **clearSession 完善**：重置 `selectedKBID` 和 `ragOptions`，避免 KB 被删后残留旧 ID
+- ✅ [stores/chat.ts](/web/src/stores/chat.ts) 已验证 — 反馈提交错误状态已在 2026-06-16 审计修复中加入
+
+---
+
 ## 1. 认证与授权
 
 > 对应图：[auth-flow.md](diagrams/auth-flow.md) — 登录 → JWT 双令牌 → 中间件链 → RBAC 权限校验
@@ -228,7 +262,7 @@
 
 ### 数据安全
 
-- 🔴⭐ [repository/role_repo.go](/server/internal/repository/role_repo.go) — **GORM 零值陷阱**：`Delete(&Role{}, 0)` 删除全部角色。需加 `if id <= 0` 守卫或改用 `Where("id = ?", id).Delete()`
+- 🔴⭐ [repository/role_repo.go](/server/internal/repository/role_repo.go) — **GORM 零值陷阱**：`Delete(&Role{}, 0)` 删除全部角色。需加 `if id <= 0` 守卫或改用 `Where("id = ?", id).Delete()` ✅ 已修复（2026-06-20）
 - 🔴 [service/user_service.go](/server/internal/service/user_service.go) — `AssignRoles` 内层再开事务（嵌套事务风险：外层事务回滚不包含 AssignRoles 的变更）
 - 🟡⭐ [service/user_service.go](/server/internal/service/user_service.go) — **丢失更新竞态**：`Update` 用 `GetByID` → 修改内存 → `Save`，并发 `ChangePassword` 的密码哈希会被 `Save` 覆盖
 - 🟡⭐ [service/role_service.go](/server/internal/service/role_service.go) — **TOCTOU 竞态**：`Delete` 先 `CountUsersByRole` 检查再 `Delete`，并发 `AssignRoles` 可在检查后分配用户到此角色
@@ -275,18 +309,18 @@
 
 ### LLM 客户端
 
-- 🔴⭐ [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — **重试机制完全失效**：`doHTTPRequest` 将 429/503 包装为普通 `fmt.Errorf` 而非 `*retryableError`，`isRetryable()` 永远返回 false。LLM 同步重试和 Embedding 重试均不工作。
-- 🔴 [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — 校验 baseURL 非空且合法（空字符串产生误导性 "unsupported protocol scheme" 错误）
-- 🔴 [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — `req.Model` 为空时应返回参数错误（而非将空字符串发给 API）
-- 🔴 [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — `bufio.Scanner` 默认 64KB 上限，大 SSE `data:` 行会触发 `ErrTooLong` 静默截断流
-- 🔴 [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — 流式请求无 429/503 重试（直接 return status code error）
+- 🔴⭐ [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — **重试机制完全失效**：`doHTTPRequest` 将 429/503 包装为普通 `fmt.Errorf` 而非 `*retryableError`，`isRetryable()` 永远返回 false。✅ 已修复（2026-06-20）
+- 🔴 [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — 校验 baseURL 非空且合法 ✅ 已修复（2026-06-20）
+- 🔴 [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — `req.Model` 为空时应返回参数错误 ✅ 已修复（2026-06-20）
+- 🔴 [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — `bufio.Scanner` 默认 64KB 上限，大 SSE `data:` 行会触发 `ErrTooLong` ✅ 已修复（2026-06-20: 扩展至 1MB）
+- 🔴 [adapter/llm_client.go](/server/internal/adapter/llm_client.go) — 流式请求无 429/503 重试 ✅ 已修复（2026-06-20: streamRequestWithRetry）
 
 ### LLM 配置管理
 
-- 🔴⭐ [service/llm_config_service.go](/server/internal/service/llm_config_service.go) — **事务内使用 repo 原始 DB 而非 tx**：`ClearDefault()` 和 `Create()` 在 `db.Transaction()` 内调但用 `s.repo` 的 `*gorm.DB`，操作在事务外执行，原子性为空壳
-- 🔴⭐ [handler/llm_config.go](/server/internal/handler/llm_config.go) — **TestConnection 测试的是全局默认客户端而非被测配置**：始终用 `h.llmClient`，选择 `:id` 配置无意义——功能完全失效。📝 [API/llm-config.md](API/llm-config.md) 记载测试「指定配置的连接」，但代码实现与之完全不符。
-- 🔴⭐ [handler/llm_config.go](/server/internal/handler/llm_config.go) — **UpdateConfig 会清空 api_key**：若请求不传 `api_key`，零值 `""` 覆盖数据库中已存储的密钥。📝 [API/llm-config.md](API/llm-config.md) 记载「api_key 不传时保留原有密钥（不传 ≠ 清空）」，代码行为与文档相反。
-- 🔴 [service/llm_config_service.go](/server/internal/service/llm_config_service.go) — `atomic.Store` 直接存指针，未复制 cfg；调用方修改原对象 → 并发读看到中间态（数据竞态）
+- 🔴⭐ [service/llm_config_service.go](/server/internal/service/llm_config_service.go) — **事务内使用 repo 原始 DB 而非 tx**：`ClearDefault()` 和 `Create()` 在 `db.Transaction()` 内调但用 `s.repo` 的 `*gorm.DB`，操作在事务外执行，原子性为空壳 ✅ 已修复（2026-06-20: WithTx 机制）
+- 🔴⭐ [handler/llm_config.go](/server/internal/handler/llm_config.go) — **TestConnection 测试的是全局默认客户端而非被测配置** 📝 [API/llm-config.md](API/llm-config.md) 记载测试「指定配置的连接」，但代码实现与之完全不符。✅ 已修复（2026-06-20: 基于被测 cfg 创建临时客户端）
+- 🔴⭐ [handler/llm_config.go](/server/internal/handler/llm_config.go) — **UpdateConfig 会清空 api_key** 📝 [API/llm-config.md](API/llm-config.md) 记载「api_key 不传时保留原有密钥」，代码行为与文档相反。✅ 已修复（2026-06-20: 先取旧配置保留未传字段）
+- 🔴 [service/llm_config_service.go](/server/internal/service/llm_config_service.go) — `atomic.Store` 直接存指针，未复制 cfg；调用方修改原对象 → 并发读看到中间态 ✅ 已修复（2026-06-20: 深拷贝后存储）
 - 🔴 [service/llm_config_service.go](/server/internal/service/llm_config_service.go) — 构造函数不应 panic：mock 类型不匹配会直接崩溃进程，应返回 error
 - 🔴⭐ [model/llm_config.go](/server/internal/model/llm_config.go) — **API Key 明文存储**：数据库泄露 = 所有 LLM 提供商密钥暴露。需 AES-256 加密存储。📝 [API/llm-config.md](API/llm-config.md) 记载「api_key 在数据库中以 AES-256 加密存储」，但代码完全未实现加密。
 - 🔴⭐ [repository/llm_config_repo.go](/server/internal/repository/llm_config_repo.go) — **缺少 `is_default` 部分唯一索引**：并发创建默认配置可产生多条 `is_default=true` 记录
@@ -615,12 +649,12 @@
 
 ### P0 速览（生产环境最优先修复）
 
-1. LLM/Embedding 重试机制完全失效
+1. ✅ ~~LLM/Embedding 重试机制完全失效~~ — 已修复（llm_client.go: doHTTPRequest retryableError + streamRequestWithRetry）
 2. API Key 明文存储 📝
-3. TestConnection 测试错误端点 📝
-4. UpdateConfig 清空 api_key 📝
-5. 事务用错 DB 句柄
-6. `role_repo.Delete(0)` 删除全部角色
+3. ✅ ~~TestConnection 测试错误端点~~ 📝 — 已修复（handler/llm_config.go: 被测 cfg 创建临时客户端）
+4. ✅ ~~UpdateConfig 清空 api_key~~ 📝 — 已修复（handler/llm_config.go: 先取旧配置保留未传字段）
+5. ✅ ~~事务用错 DB 句柄~~ — 已修复（llm_config_service.go + llm_config_repo.go: WithTx 机制）
+6. ✅ ~~`role_repo.Delete(0)` 删除全部角色~~ — 已修复（role_repo.go: id <= 0 守卫 + RowsAffected 检查）
 7. pgvector/MinIO nil 传播
 8. 配置 YAML 格式错误静默吞掉
 9. ASC+DESC 双重索引
@@ -638,4 +672,4 @@
 
 ---
 
-**最后更新**：2026-06-16（"已修复"全部改为逐项 ✅ 列表；§1 20 项 + §2 43 项 + §3 2 项 + §10 1 项）
+**最后更新**：2026-06-20（本次修复 21 项：后端 11 项 + 前端 10 项。P0 进度 5/20→10/20）

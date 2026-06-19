@@ -120,7 +120,7 @@ import { articleStatusClass as statusClass, articleStatusText as statusText, pro
 import { useToast } from '@/composables/useToast'
 import { listKnowledgeBases, createKnowledgeBase, updateKnowledgeBase, listArticles, submitReview, publishArticle, disableArticle, enableArticle, retrySyncArticle, retryDocument } from '@/api/knowledge'
 
-interface KB { id: number; name: string }
+interface KB { id: number; name: string; description?: string }
 // 统一文章模型字段
 interface Article { id: number; title: string; content: string; category?: string; status: number; source_type: number; word_count?: number; process_status?: string; updated_at?: string }
 
@@ -171,20 +171,20 @@ const fetchArticles = async () => {
     startDocPolling()
   } catch (e) { console.error(e); toast.showToast('加载文章列表失败', 'error') }
 }
-const startEditKB = (kb: KB) => { editingKB.value = kb; editKBForm.value = { name: kb.name, description: '' }; showEditKBDialog.value = true }
+const startEditKB = (kb: KB) => { editingKB.value = kb; editKBForm.value = { name: kb.name, description: kb.description || '' }; showEditKBDialog.value = true }
 const handleCreateKB = async () => {
-  try { await createKnowledgeBase(newKB.value); showKBDialog.value = false; newKB.value = { name: '', description: '' }; await fetchKBs() } catch (e: any) { alert(e?.message || '创建失败') }
+  try { await createKnowledgeBase(newKB.value); showKBDialog.value = false; newKB.value = { name: '', description: '' }; await fetchKBs() } catch (e: any) { toast.showToast(e?.message || '创建失败', 'error') }
 }
 const handleUpdateKB = async () => {
   if (!editingKB.value) return
-  try { await updateKnowledgeBase(editingKB.value.id, editKBForm.value); showEditKBDialog.value = false; await fetchKBs() } catch (e: any) { alert(e?.message || '更新失败') }
+  try { await updateKnowledgeBase(editingKB.value.id, editKBForm.value); showEditKBDialog.value = false; await fetchKBs() } catch (e: any) { toast.showToast(e?.message || '更新失败', 'error') }
 }
 const goCreate = () => { router.push(`/admin/knowledge/new?kb_id=${selectedKB.value!.id}`) }
 const goEdit = (id: number) => { router.push(`/admin/knowledge/${id}`) }
-const handleSubmitReview = async (id: number) => { try { await submitReview(id); await fetchArticles() } catch (e: any) { alert(e?.message) } }
-const handlePublish = async (id: number) => { try { await publishArticle(id); await fetchArticles() } catch (e: any) { alert(e?.message) } }
-const handleDisable = async (id: number) => { if (!confirm('确定停用？')) return; try { await disableArticle(id); await fetchArticles() } catch (e: any) { alert(e?.message) } }
-const handleEnable = async (id: number) => { try { await enableArticle(id); await fetchArticles() } catch (e: any) { alert(e?.message) } }
+const handleSubmitReview = async (id: number) => { try { await submitReview(id); await fetchArticles() } catch (e: any) { toast.showToast(e?.message || '提交审核失败', 'error') } }
+const handlePublish = async (id: number) => { try { await publishArticle(id); await fetchArticles() } catch (e: any) { toast.showToast(e?.message || '发布失败', 'error') } }
+const handleDisable = async (id: number) => { if (!confirm('确定停用？')) return; try { await disableArticle(id); await fetchArticles() } catch (e: any) { toast.showToast(e?.message || '停用失败', 'error') } }
+const handleEnable = async (id: number) => { try { await enableArticle(id); await fetchArticles() } catch (e: any) { toast.showToast(e?.message || '启用失败', 'error') } }
 const handleRetryDocument = async (id: number) => {
   if (!selectedKB.value) return
   try { await retryDocument(selectedKB.value.id, id); await fetchArticles() } catch (e: any) { alert(e?.message) }

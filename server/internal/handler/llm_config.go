@@ -113,9 +113,9 @@ func (h *LLMConfigHandler) GetConfig(c *gin.Context) {
 // UpdateConfig 更新 LLM 配置。
 //
 // PUT /api/v1/admin/llm-configs/:id
+//
+// api_key 不传时保留原有密钥（不传 ≠ 清空），与 API 文档一致。
 func (h *LLMConfigHandler) UpdateConfig(c *gin.Context) {
-	// TODO(handler/llm_config): UpdateConfig 是全量替换，api_key 不传时应保留原值。
-	// 需要使用指针字段 DTO 区分零值和未传字段。
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.Error(c, errcode.ErrParam, "无效的配置 ID")
@@ -127,11 +127,28 @@ func (h *LLMConfigHandler) UpdateConfig(c *gin.Context) {
 		response.Error(c, errcode.ErrParam, "参数校验失败: "+err.Error())
 		return
 	}
-	if req.MaxTokens == 0 {
-		req.MaxTokens = 8192
+
+	// 先取旧配置，用于保留未传字段
+	oldCfg, err := h.svc.GetConfig(id)
+	if err != nil {
+		handleServiceError(c, err)
+		return
 	}
-	if req.VectorDimension == 0 {
-		req.VectorDimension = 1024
+
+	// api_key 不传时保留原有密钥
+	apiKey := req.APIKey
+	if apiKey == "" {
+		apiKey = oldCfg.APIKey
+	}
+	// max_tokens 不传时保留原值
+	maxTokens := req.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = oldCfg.MaxTokens
+	}
+	// vector_dimension 不传时保留原值
+	vectorDim := req.VectorDimension
+	if vectorDim == 0 {
+		vectorDim = oldCfg.VectorDimension
 	}
 
 	cfg := &model.LlmConfig{
@@ -140,12 +157,12 @@ func (h *LLMConfigHandler) UpdateConfig(c *gin.Context) {
 		ProviderType:     req.ProviderType,
 		BaseURL:          req.BaseURL,
 		EmbeddingBaseURL: req.EmbeddingBaseURL,
-		APIKey:           req.APIKey,
+		APIKey:           apiKey,
 		LLMModel:         req.LLMModel,
 		EmbeddingModel:   req.EmbeddingModel,
-		MaxTokens:        req.MaxTokens,
-		VectorDimension:  req.VectorDimension,
-		IsDefault:       req.IsDefault,
+		MaxTokens:        maxTokens,
+		VectorDimension:  vectorDim,
+		IsDefault:        req.IsDefault,
 	}
 
 	if err := h.svc.UpdateConfig(cfg); err != nil {
@@ -175,9 +192,9 @@ func (h *LLMConfigHandler) DeleteConfig(c *gin.Context) {
 // TestConnection 测试 LLM 连接。
 //
 // POST /api/v1/admin/llm-configs/:id/test
+//
+// 基于被测 cfg 创建临时 OpenAIClient 进行连接测试，而非使用全局默认客户端。
 func (h *LLMConfigHandler) TestConnection(c *gin.Context) {
-	// TODO(handler/llm_config): 测试连接应基于被测 cfg 创建临时 OpenAIClient。
-	// 当前使用注入的 h.llmClient，实际测试的是启动时默认 BaseURL/APIKey，而不是 :id 对应配置。
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.Error(c, errcode.ErrParam, "无效的配置 ID")
@@ -190,13 +207,9 @@ func (h *LLMConfigHandler) TestConnection(c *gin.Context) {
 		return
 	}
 
-	// 测试连接：使用注入的 LLMClient 向配置的 BaseURL 发送 /v1/models 请求
-	if h.llmClient == nil {
-		response.Error(c, errcode.ErrUnknown, "LLM 客户端未初始化，无法测试连接")
-		return
-	}
+	// 基于被测配置创建临时客户端
+	testClient := adapter.NewOpenAIClient(cfg.BaseURL, cfg.APIKey, 10*time.Second)
 
-	// 构造一个极小的请求来验证连通性
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
@@ -209,21 +222,23 @@ func (h *LLMConfigHandler) TestConnection(c *gin.Context) {
 		Temperature: 0,
 	}
 
-		start := time.Now()
-		resp, err := h.llmClient.ChatCompletion(ctx, testReq)
-		latency := time.Since(start).Milliseconds()
-		if err != nil {
-			// TODO(handler/llm_config): 测试连接失败应返回 code=0, data.success=false 以区分接口错误。
-			// 当前返回 ErrAIUnavailable，会让前端把业务测试失败当成接口失败处理。
-			response.Error(c, errcode.ErrAIUnavailable, "连接测试失败: "+err.Error())
-			return
-		}
-
+	start := time.Now()
+	resp, err := testClient.ChatCompletion(ctx, testReq)
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		// 测试连接失败返回 code=0, data.success=false，区分于接口错误
 		response.Success(c, gin.H{
-			"success":      true,
-			"model":        cfg.LLMModel,
-			"latency_ms":   latency,
-			"test_message": resp.Content,
-			"tokens_used":  resp.TokensUsed,
+			"success": false,
+			"error":   err.Error(),
 		})
+		return
+	}
+
+	response.Success(c, gin.H{
+		"success":      true,
+		"model":        cfg.LLMModel,
+		"latency_ms":   latency,
+		"test_message": resp.Content,
+		"tokens_used":  resp.TokensUsed,
+	})
 }

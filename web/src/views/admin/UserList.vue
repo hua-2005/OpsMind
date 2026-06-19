@@ -18,7 +18,7 @@
             <td>{{ user.phone }}</td>
             <td>{{ user.email || '-' }}</td>
             <td><span :class="['status-tag', user.status === 1 ? 'active' : 'frozen']">{{ user.status === 1 ? '正常' : '已冻结' }}</span></td>
-            <td>{{ (user.roles || []).join('、') }}</td>
+            <td>{{ (user.role_names || []).join('、') }}</td>
             <td class="action-cell">
               <button class="btn-action" @click="startEdit(user)">编辑</button>
               <button v-if="user.status === 1" class="btn-action danger" @click="handleFreeze(user.id)">冻结</button>
@@ -74,11 +74,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { getUserList, createUser, updateUser, freezeUser, restoreUser } from '@/api/user'
+import type { UserItem } from '@/api/user'
 import { getRoleList } from '@/api/role'
 import type { RoleItem } from '@/api/role'
 import { useToast } from '@/composables/useToast'
-
-interface UserItem { id: number; username: string; real_name: string; phone: string; email: string; status: number; roles: string[]; role_ids?: number[] }
 
 const loading = ref(true); const saving = ref(false)
 const users = ref<UserItem[]>([]); const allRoles = ref<RoleItem[]>([])

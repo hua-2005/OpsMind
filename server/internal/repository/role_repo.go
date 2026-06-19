@@ -5,6 +5,8 @@
 package repository
 
 import (
+	"fmt"
+
 	"opsmind/internal/model"
 
 	"gorm.io/gorm"
@@ -79,7 +81,15 @@ func (r *RoleRepo) Update(role *model.Role) error {
 // GORM 零值陷阱：当 id == 0 时 Delete(&Role{}, 0) 会忽略主键条件，删除全部角色。
 // 必须在调用前检查 id <= 0，Service 层已做存在性校验但未防御 id=0 边界。
 func (r *RoleRepo) Delete(id int64) error {
-	// TODO(repository/role): 增加 id <= 0 守卫防止 GORM 零值陷阱误删全表。
-	// 同时应检查 RowsAffected——Service 虽先查存在，但并发删除时仍可能静默成功。
-	return r.db.Delete(&model.Role{}, id).Error
+	if id <= 0 {
+		return fmt.Errorf("role_repo.Delete: id 必须大于 0，当前值 %d", id)
+	}
+	result := r.db.Delete(&model.Role{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

@@ -60,7 +60,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getRoleList, createRole, updateRole, deleteRole } from '@/api/role'
+import { getRoleList, createRole, updateRole, deleteRole, listMenus } from '@/api/role'
 import type { RoleItem } from '@/api/role'
 import { useToast } from '@/composables/useToast'
 
@@ -74,7 +74,37 @@ const editingRole = ref<RoleItem | null>(null)
 const saving = ref(false)
 const form = ref({ name: '', description: '', permissions: [] as string[] })
 
-const availablePermissions = ['user:manage', 'ticket:read', 'ticket:write', 'knowledge:read', 'knowledge:write', 'knowledge:review', 'audit:read', 'system:config']
+// 从服务端菜单动态获取可用权限列表，避免前端硬编码
+const availablePermissions = ref<string[]>([])
+// 静态回退——当菜单 API 不可用时使用，需与后端 RBAC 权限常量保持同步
+const fallbackPermissions = [
+  'user:manage', 'ticket:read', 'ticket:write',
+  'knowledge:read', 'knowledge:write', 'knowledge:review',
+  'audit:read', 'system:config', 'dashboard:read',
+  'message:send', 'llm:manage',
+]
+
+async function loadPermissions() {
+  try {
+    const res = await listMenus()
+    const menus = Array.isArray(res.data) ? res.data : []
+    // 从菜单树中提取按钮权限标识（type=button 的菜单项通常映射到权限）
+    const perms = new Set<string>()
+    function walk(items: any[]) {
+      for (const m of items) {
+        if (m.permission) perms.add(m.permission)
+        if (m.children) walk(m.children)
+      }
+    }
+    walk(menus)
+    if (perms.size > 0) {
+      availablePermissions.value = Array.from(perms).sort()
+    }
+  } catch {
+    // 菜单 API 不可用时使用静态回退
+    availablePermissions.value = fallbackPermissions
+  }
+}
 
 async function loadRoles() {
   loading.value = true
@@ -141,7 +171,7 @@ async function handleDelete(role: RoleItem) {
   }
 }
 
-onMounted(loadRoles)
+onMounted(() => { loadRoles(); loadPermissions() })
 </script>
 
 <style scoped>

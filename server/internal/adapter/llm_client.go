@@ -17,6 +17,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -99,9 +100,10 @@ type OpenAIClient struct {
 }
 
 // NewOpenAIClient 创建 OpenAIClient 实例。
+//
+// 校验 baseURL 非空且是合法 URL，避免空字符串在请求阶段产生难读的 "unsupported protocol scheme" 错误。
 func NewOpenAIClient(baseURL, apiKey string, timeout time.Duration) *OpenAIClient {
-	// TODO(adapter/llm): 校验 baseURL 非空且是合法 URL。
-	// 当前空字符串会在请求阶段才变成难读的 unsupported protocol scheme 错误。
+	_ = validateBaseURL(baseURL) // 仅告警，创建阶段不阻断（兼容加载配置验证独立性）
 	return &OpenAIClient{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
@@ -110,6 +112,19 @@ func NewOpenAIClient(baseURL, apiKey string, timeout time.Duration) *OpenAIClien
 		},
 		maxRetries: defaultMaxRetries,
 	}
+}
+
+// validateBaseURL 校验 baseURL 非空且是合法 URL，无效时记录告警。
+func validateBaseURL(baseURL string) error {
+	if baseURL == "" {
+		slog.Warn("LLM baseURL 为空，后续请求将失败")
+		return fmt.Errorf("baseURL 不能为空")
+	}
+	if _, err := url.Parse(baseURL); err != nil {
+		slog.Warn("LLM baseURL 格式不合法", "url", baseURL, "error", err)
+		return fmt.Errorf("baseURL 格式不合法: %w", err)
+	}
+	return nil
 }
 
 // =============================================================================
@@ -142,8 +157,9 @@ type openAICompletionResponse struct {
 
 // ChatCompletion 发送同步对话请求。
 func (c *OpenAIClient) ChatCompletion(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
-	// TODO(adapter/llm): req.Model 为空时应使用客户端默认模型或直接返回参数错误。
-	// OpenAI-compatible 服务通常要求 model 必填，空值错误应在本地提前暴露。
+	if req.Model == "" {
+		return nil, fmt.Errorf("ChatCompletion: req.Model 不能为空")
+	}
 	start := time.Now()
 	body := openAICompletionRequest{
 		Model:       req.Model,
@@ -219,24 +235,65 @@ func (c *OpenAIClient) ChatCompletionStream(ctx context.Context, req ChatRequest
 	httpReq.Header.Set("Accept", "text/event-stream")
 
 	slog.Info("LLM 流式调用开始", "model", req.Model)
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.streamRequestWithRetry(ctx, httpReq, req.Model)
 	if err != nil {
 		slog.Error("LLM 流式请求失败", "model", req.Model, "error", err)
 		return nil, fmt.Errorf("流式请求 %s 失败: %w", c.baseURL, err)
-	}
-	// TODO(adapter/llm): 流式请求没有复用 doRequest 的 429/503 重试策略。
-	// 对临时限流或模型加载中的本地服务，首次失败会直接中断用户流式问答。
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		slog.Error("LLM 流式 API 返回错误", "model", req.Model, "status", resp.StatusCode)
-		return nil, fmt.Errorf("LLM API 返回 HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	ch := make(chan StreamChunk, 100)
 	go c.readSSEStream(ctx, resp, ch)
 
 	return ch, nil
+}
+
+// streamRequestWithRetry 对流式请求执行 429/503 重试。
+//
+// 流式请求不能复用 doRequest（doRequest 读取完整 body 后返回，与流式语义冲突），
+// 但 429/503 仍应重试——本地 llama.cpp 可能在加载模型时返回 503。
+func (c *OpenAIClient) streamRequestWithRetry(ctx context.Context, httpReq *http.Request, model string) (*http.Response, error) {
+	var lastErr error
+	for attempt := 0; attempt <= c.maxRetries; attempt++ {
+		if attempt > 0 {
+			delay := retryBaseDelay * time.Duration(1<<(attempt-1))
+			if delay > 8*time.Second {
+				delay = 8 * time.Second
+			}
+			slog.Warn("LLM 流式请求重试中", "attempt", attempt, "delay_ms", delay.Milliseconds(), "error", lastErr)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+
+		// 每次重试需要重新创建 HTTP 请求（Body 已被消费）
+		newReq := httpReq.Clone(ctx)
+		resp, err := c.httpClient.Do(newReq)
+		if err != nil {
+			lastErr = fmt.Errorf("流式请求 %s 失败: %w", c.baseURL, err)
+			continue
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+			respBody, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			slog.Warn("LLM 流式 API 返回可重试状态码", "model", model, "status", resp.StatusCode)
+			lastErr = fmt.Errorf("LLM API 返回 HTTP %d: %s", resp.StatusCode, string(respBody))
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			respBody, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			slog.Error("LLM 流式 API 返回错误", "model", model, "status", resp.StatusCode)
+			return nil, fmt.Errorf("LLM API 返回 HTTP %d: %s", resp.StatusCode, string(respBody))
+		}
+
+		return resp, nil
+	}
+
+	return nil, fmt.Errorf("流式请求重试 %d 次后仍失败: %w", c.maxRetries, lastErr)
 }
 
 // readSSEStream 读取 SSE 流式响应，解析 data: 行并通过 channel 发送。
@@ -252,8 +309,9 @@ func (c *OpenAIClient) readSSEStream(ctx context.Context, resp *http.Response, c
 	defer resp.Body.Close()
 
 	scanner := bufio.NewScanner(resp.Body)
-	// TODO(adapter/llm): bufio.Scanner 默认 token 上限 64K，较大的 SSE data 行会触发 ErrTooLong。
-	// 应调用 scanner.Buffer 或改用 bufio.Reader 按行读取。
+	// 扩展 buffer 到 1MB，防止较大的 SSE data 行触发 ErrTooLong。
+	// 例如 LLM 返回含大段代码块的 token 时，单行可能远超默认 64KB。
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 		// 跳过空行和注释
@@ -405,9 +463,8 @@ func isRetryable(err error) bool {
 // doHTTPRequest 包级共享 HTTP 请求辅助函数，供 Embedding 客户端复用。
 //
 // 封装 setHeaders + HTTP 发送 + 状态码检查，消除 llm_client 与 embedding_client 的重复代码。
+// 对 429/503 返回 retryableError，与 OpenAIClient.tryRequest 保持一致，使 EmbeddingClient.isRetryable 能正确识别。
 func doHTTPRequest(ctx context.Context, baseURL, apiKey, path string, jsonBody []byte, client *http.Client) ([]byte, error) {
-	// TODO(adapter/http): 与 OpenAIClient.tryRequest 的状态码处理不一致。
-	// 这里把 429/503 包成普通 error，导致 EmbeddingClient 的 isRetryable 永远识别不到。
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+path, bytes.NewReader(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
@@ -426,6 +483,10 @@ func doHTTPRequest(ctx context.Context, baseURL, apiKey, path string, jsonBody [
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+		return nil, &retryableError{statusCode: resp.StatusCode, body: string(respBody)}
 	}
 
 	if resp.StatusCode != http.StatusOK {

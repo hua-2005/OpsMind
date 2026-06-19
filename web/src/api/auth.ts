@@ -1,6 +1,6 @@
 import request from '@/utils/request'
 import type { ApiResponse } from '@/types/api'
-import type { MenuItem } from '@/stores/auth'
+import type { MenuItem } from '@/types/menu'
 
 interface LoginParams {
   username: string

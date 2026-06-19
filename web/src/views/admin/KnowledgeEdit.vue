@@ -198,7 +198,7 @@ onMounted(async () => {
 })
 
 const fetchKBs = async () => {
-  try { const res = await listKnowledgeBases(); kbList.value = Array.isArray(res.data) ? res.data : [] } catch (e) { console.error(e); alert('加载知识库列表失败') }
+  try { const res = await listKnowledgeBases(); kbList.value = Array.isArray(res.data) ? res.data : [] } catch (e) { console.error(e); toast.showToast('加载知识库列表失败', 'error') }
 }
 const fetchArticle = async () => {
   try {
@@ -211,7 +211,7 @@ const fetchArticle = async () => {
       category: res.data.category || '',
       tags: res.data.tags || [],
     }
-  } catch (e) { console.error(e); alert('加载文章详情失败') }
+  } catch (e) { console.error(e); toast.showToast('加载文章详情失败', 'error') }
 }
 
 const addTag = () => { const t = tagInput.value.trim(); if (t && !form.value.tags.includes(t)) form.value.tags.push(t); tagInput.value = '' }
@@ -222,7 +222,7 @@ const goBack = () => {
 }
 
 const handleSave = async () => {
-  if (!form.value.title || !form.value.content) { alert('标题和内容不能为空'); return }
+  if (!form.value.title || !form.value.content) { toast.showToast('标题和内容不能为空', 'warning'); return }
   saving.value = true
   try {
     const payload = {
@@ -237,23 +237,23 @@ const handleSave = async () => {
       await updateArticle(Number(articleId), payload)
     }
     router.back()
-  } catch (e: any) { alert(e?.message || '保存失败') } finally { saving.value = false }
+  } catch (e: any) { toast.showToast(e?.message || '保存失败', 'error') } finally { saving.value = false }
 }
-const handleSubmitReview = async () => { try { await submitReview(Number(articleId)); await fetchArticle() } catch (e: any) { alert(e?.message) } }
+const handleSubmitReview = async () => { try { await submitReview(Number(articleId)); await fetchArticle() } catch (e: any) { toast.showToast(e?.message || '提交审核失败', 'error') } }
 const handleReview = async (approved: boolean) => {
-  if (!approved && !reviewComment.value.trim()) { alert('驳回时必须填写审核意见'); return }
-  try { await reviewArticle(Number(articleId), { approved, review_comment: reviewComment.value }); router.back() } catch (e: any) { alert(e?.message) }
+  if (!approved && !reviewComment.value.trim()) { toast.showToast('驳回时必须填写审核意见', 'warning'); return }
+  try { await reviewArticle(Number(articleId), { approved, review_comment: reviewComment.value }); router.back() } catch (e: any) { toast.showToast(e?.message || '审核操作失败', 'error') }
 }
-const handlePublish = async () => { try { await publishArticle(Number(articleId)); await fetchArticle() } catch (e: any) { alert(e?.message) } }
-const handleDisable = async () => { if (!confirm('确定停用？')) return; try { await disableArticle(Number(articleId)); await fetchArticle() } catch (e: any) { alert(e?.message) } }
-const handleEnable = async () => { try { await enableArticle(Number(articleId)); await fetchArticle() } catch (e: any) { alert(e?.message) } }
+const handlePublish = async () => { try { await publishArticle(Number(articleId)); await fetchArticle() } catch (e: any) { toast.showToast(e?.message || '发布失败', 'error') } }
+const handleDisable = async () => { if (!confirm('确定停用？')) return; try { await disableArticle(Number(articleId)); await fetchArticle() } catch (e: any) { toast.showToast(e?.message || '停用失败', 'error') } }
+const handleEnable = async () => { try { await enableArticle(Number(articleId)); await fetchArticle() } catch (e: any) { toast.showToast(e?.message || '启用失败', 'error') } }
 // 文档处理重试
 const handleRetryDocument = async () => {
   if (!article.value) return
   try {
     await retryDocument(article.value.kb_id, article.value.id)
     await fetchArticle()
-  } catch (e: any) { alert(e?.message || '重试失败') }
+  } catch (e: any) { toast.showToast(e?.message || '重试失败', 'error') }
 }
 
 // 文件选择
@@ -270,8 +270,8 @@ function addFiles(newFiles: File[]) {
   const allowed = ['.pdf', '.docx', '.md', '.txt']
   for (const f of newFiles) {
     const ext = '.' + f.name.split('.').pop()?.toLowerCase()
-    if (!allowed.includes(ext)) { alert(`不支持的文件类型: ${f.name}`); continue }
-    if (f.size > 50 * 1024 * 1024) { alert(`文件过大: ${f.name}（≤ 50MB）`); continue }
+    if (!allowed.includes(ext)) { toast.showToast(`不支持的文件类型: ${f.name}（支持 PDF/DOCX/MD/TXT）`, 'warning'); continue }
+    if (f.size > 50 * 1024 * 1024) { toast.showToast(`文件过大: ${f.name}（≤ 50MB）`, 'warning'); continue }
     uploadFiles.value.push(f)
   }
 }

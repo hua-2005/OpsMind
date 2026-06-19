@@ -28,6 +28,13 @@ func (r *LlmConfigRepo) DB() *gorm.DB {
 	return r.db
 }
 
+// WithTx 返回使用指定事务 DB 的新仓库实例。
+//
+// Service 层事务内应使用此方法创建事务作用域的 repo，确保所有操作共享同一数据库会话。
+func (r *LlmConfigRepo) WithTx(tx *gorm.DB) *LlmConfigRepo {
+	return &LlmConfigRepo{db: tx}
+}
+
 // Create 创建 LLM 配置。
 func (r *LlmConfigRepo) Create(cfg *model.LlmConfig) error {
 	return r.db.Create(cfg).Error

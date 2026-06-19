@@ -26,7 +26,7 @@ interface UpdateUserParams {
   role_ids: number[]
 }
 
-/** 用户数据模型 */
+/** 用户数据模型（与后端 User 响应一致） */
 export interface UserItem {
   id: number
   username: string
@@ -35,6 +35,7 @@ export interface UserItem {
   email?: string
   status: number
   role_names?: string[]
+  role_ids?: number[]
   created_at?: string
 }
 

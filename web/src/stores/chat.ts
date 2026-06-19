@@ -197,6 +197,8 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
     currentStep.value = ''
     pipelineMetrics.value = null
+    selectedKBID.value = null
+    ragOptions.value = { top_k: 5, query_rewrite: true, multi_route: true, hybrid: true, rerank: true }
     sessionStorage.removeItem('opsmind_chat_messages')
   }
 
