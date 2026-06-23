@@ -42,7 +42,7 @@ func init() {
 func setupUserHandler(t *testing.T) (*handler.UserHandler, *model.User) {
 	t.Helper()
 	repo := repository.NewUserRepo(userHandlerDB)
-	svc := service.NewUserService(repo, userHandlerDB)
+	svc := service.NewUserService(repo, userHandlerDB, nil)
 	h := handler.NewUserHandler(svc)
 
 	user := &model.User{

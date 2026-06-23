@@ -53,19 +53,19 @@ func setupChatHandlerTest(t *testing.T) *chatHandlerEnv {
 	}
 
 	// 建表
-	db.Exec(`CREATE TABLE IF NOT EXISTS knowledge_bases (
+	db.Exec(`DROP TABLE IF EXISTS knowledge_bases CASCADE`); db.Exec(`CREATE TABLE IF NOT EXISTS knowledge_bases (
 		id BIGSERIAL PRIMARY KEY, name VARCHAR(128) NOT NULL, description TEXT,
 		rag_workspace_slug VARCHAR(128), embedding_model VARCHAR(128) NOT NULL DEFAULT '',
 		vector_dimension INT NOT NULL DEFAULT 0, created_by BIGINT NOT NULL,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`)
-	db.Exec(`CREATE TABLE IF NOT EXISTS chat_sessions (
+	db.Exec(`DROP TABLE IF EXISTS chat_sessions CASCADE`); db.Exec(`CREATE TABLE IF NOT EXISTS chat_sessions (
 		id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, kb_id BIGINT NOT NULL,
 		question TEXT NOT NULL, answer TEXT, sources JSONB,
 		confidence DOUBLE PRECISION DEFAULT 0, feedback SMALLINT DEFAULT 0,
 		duration_ms INT DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	)`)
-	db.Exec(`CREATE TABLE IF NOT EXISTS chat_messages (
+	db.Exec(`DROP TABLE IF EXISTS chat_messages CASCADE`); db.Exec(`CREATE TABLE IF NOT EXISTS chat_messages (
 		id BIGSERIAL PRIMARY KEY, session_id BIGINT NOT NULL,
 		role VARCHAR(16) NOT NULL, content TEXT NOT NULL, sources JSONB,
 		confidence DOUBLE PRECISION DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

@@ -45,6 +45,11 @@ func setupChatServiceTest(t *testing.T) (*service.ChatService, *model.KnowledgeB
 	t.Helper()
 
 	// 创建表
+		chatSvcDB.Exec("DROP TABLE IF EXISTS chat_messages CASCADE")
+		chatSvcDB.Exec("DROP TABLE IF EXISTS chat_sessions CASCADE")
+		chatSvcDB.Exec("DROP TABLE IF EXISTS knowledge_chunks CASCADE")
+		chatSvcDB.Exec("DROP TABLE IF EXISTS knowledge_articles CASCADE")
+		chatSvcDB.Exec("DROP TABLE IF EXISTS knowledge_bases CASCADE")
 	chatSvcDB.Exec(`CREATE TABLE IF NOT EXISTS users (
 		id BIGSERIAL PRIMARY KEY, username VARCHAR(64) NOT NULL UNIQUE,
 		password_hash VARCHAR(255) NOT NULL, real_name VARCHAR(64) NOT NULL,
